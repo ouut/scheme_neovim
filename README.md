@@ -58,6 +58,8 @@ steel-ide --extract /opt/steel-ide-runtime
 
 ---
 
+> 💡 **查看超全分类快捷键手册**：更完整的人体工学心智模型与操作场景解析，请参阅专门的 **[`KEYMAPS.md`](KEYMAPS.md)**。
+
 ## 🎯 17 个快捷键完整映射表（来自 docs/strict_paredit_guide.md）
 
 | 频级 / 占比 | Linux / Win | macOS (⌥) | 动作名称 | 对应底层实现 | 功能与效果 |

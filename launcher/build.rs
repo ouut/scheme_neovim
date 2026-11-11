@@ -136,6 +136,9 @@ fn main() {
     if root_dir.join("example.scm").exists() {
         fs::copy(root_dir.join("example.scm"), staging_dir.join("config/example.scm")).unwrap();
     }
+    if root_dir.join("KEYMAPS.md").exists() {
+        fs::copy(root_dir.join("KEYMAPS.md"), staging_dir.join("config/KEYMAPS.md")).unwrap();
+    }
 
     // Copy lazy plugins (nvim-treesitter with scheme parser, nvim-paredit, strict-paredit, etc.)
     let mut lazy_dir_candidates = Vec::new();
