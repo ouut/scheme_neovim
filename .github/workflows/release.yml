@@ -134,7 +134,7 @@ jobs:
           git clone --depth 1 https://github.com/folke/tokyonight.nvim "$PLUGINS_DIR/tokyonight.nvim"
           git clone --depth 1 -b master https://github.com/nvim-treesitter/nvim-treesitter "$PLUGINS_DIR/nvim-treesitter"
           git clone --depth 1 https://github.com/julienvincent/nvim-paredit "$PLUGINS_DIR/nvim-paredit"
-          git clone --depth 1 https://github.com/ironcamel/strict-paredit.nvim "$PLUGINS_DIR/strict-paredit.nvim"
+          git clone --depth 1 https://github.com/sundbp/strict-paredit.nvim "$PLUGINS_DIR/strict-paredit.nvim"
 
           # Verify binaries work
           "$NVIM_BIN_PATH" --version
