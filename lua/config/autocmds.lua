@@ -28,12 +28,27 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.bo[ev.buf].lisp = true
     vim.bo[ev.buf].commentstring = ";; %s"
 
+    -- Ensure Tree-sitter parsing & highlighting explicitly starts on Scheme buffers
+    pcall(vim.treesitter.start, ev.buf, "scheme")
+
     -- Steel / Scheme standard lisp keywords for indentation
     vim.opt_local.lispwords:append({
       "define", "define-syntax", "syntax-rules", "lambda", "let", "let*", "letrec", "letrec*",
       "if", "cond", "case", "when", "unless", "begin", "do", "match",
       "defn", "struct", "contract/",
     })
+  end,
+})
+
+-- Default empty unnamed buffer to Scheme mode so steel-ide starts ready
+vim.api.nvim_create_autocmd({ "VimEnter", "BufEnter" }, {
+  group = scheme_group,
+  callback = function(ev)
+    local buf = ev.buf or vim.api.nvim_get_current_buf()
+    if vim.fn.bufname(buf) == "" and vim.bo[buf].buftype == "" and vim.bo[buf].filetype == "" then
+      vim.bo[buf].filetype = "scheme"
+      pcall(vim.treesitter.start, buf, "scheme")
+    end
   end,
 })
 

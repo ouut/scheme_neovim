@@ -25,7 +25,7 @@
 | 频级 / 占比 | Linux / Win | macOS (⌥) | 模式 | 命令动作 | 心智助记符 | 核心功能与变换效果 |
 |:---:|:---:|:---:|:---:|:---|:---|:---|
 | ⭐⭐⭐⭐⭐<br>(45%) | **`Alt + K`** | **`⌥ K`** | N / V | **向外扩选 (Expand)** | 右手纵向扩张 | 自动严丝合缝选中当前 `(...)`，连按逐层外扩括号 |
-| ⭐⭐⭐⭐⭐<br>(45%) | **`Alt + Enter`<br>`Ctrl + Enter`** | **`⌥ ↵`<br>`⌘ ↵`** | N / V | **发射求值 (Eval REPL)** | 拇指锚定，一拍回车 | 将当前 S 表达式或选区代码送入右侧 Steel REPL |
+| ⭐⭐⭐⭐⭐<br>(45%) | **`Alt + Enter`**<br>**`Alt + E`**<br>`Ctrl + Enter` | **`⌥ ↵`**<br>**`⌥ E`**<br>`⌘ ↵` | N / V | **发射求值 (Eval REPL)** | 拇指锚定，一拍求值 | 将当前 S 表达式或选区代码送入右侧 Steel REPL（Win 终端推荐 `Alt+E`） |
 | ⭐⭐⭐⭐<br>(25%) | **`Alt + H`** | **`⌥ H`** | N / V | **圆括号包裹 (Wrap Parens)** | Hold/Hug 左侧包裹 | `cards` $\rightarrow$ `(cards)`（支持普通模式与可视选区） |
 | ⭐⭐⭐⭐<br>(25%) | **`Alt + Shift + H`** | **`⌥ ⇧ H`** | N / V | **方括号包裹 (Wrap Square)** | Hold square 方括号 | `x 10` $\rightarrow$ `[x 10]`（写 `let*` 局部变量与 `cond` 必备） |
 | ⭐⭐⭐⭐<br>(20%) | **`Alt + L`** | **`⌥ L`** | N | **向右吞噬 (Slurp)** | 右手 L（偏右吸入扩张） | `(a b) c` $\rightarrow$ `(a b c)`（右括号向右跨越吞入一元素） |
@@ -65,7 +65,8 @@
 | 快捷键 | 所在模式 | 功能说明 | 助记说明 |
 |:---|:---:|:---|:---|
 | **`Alt + R`** (或 `⌥ R`) | Normal / Terminal | **一键秒开 / 秒关 Steel REPL** | **R**EPL 开关，终端内按自动收起返回代码 |
-| **`Alt + Enter`**<br>`Ctrl + Enter` | Normal / Visual | **发送当前表达式或选区求值** | 未打开时**自动在右侧拉起 REPL 并平滑滚屏** |
+| **`Alt + Enter`**<br>**`Alt + E`** (推荐Win)<br>`Ctrl + Enter` | Normal / Visual | **发送当前表达式或选区求值** | 未打开时**自动在右侧拉起 REPL 并平滑滚屏**（注：Windows Terminal 默认占用 `Alt+Enter` 全屏，可使用 `Alt+E` 或 `Space+s+e` / `Space+Enter`） |
+| **`Space + s + e`**<br>**`Space + Enter`** | Normal / Visual | **发送当前表达式或选区求值 (Leader)** | **s**teel **e**val 稳健备用键 |
 | **`Space + s + o`** | Normal | 展开 / 隐藏右侧 REPL 窗口 | **s**teel **o**pen |
 | **`Space + s + c`** | Normal | 单向关闭 (隐藏) 右侧 REPL 窗口 | **s**teel **c**lose |
 | **`Space + s + q`** | Normal | 彻底杀死并重启 Steel REPL 进程 | **s**teel **q**uit |

@@ -20,6 +20,9 @@ opt.showmode = false -- We can show mode in statusline or keep clean
 opt.scrolloff = 8
 opt.sidescrolloff = 8
 
+-- Enable baseline syntax highlighting
+vim.cmd("syntax enable")
+
 -- Search settings
 opt.ignorecase = true
 opt.smartcase = true

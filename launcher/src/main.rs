@@ -196,6 +196,7 @@ fn main() -> io::Result<()> {
     cmd.env("XDG_DATA_HOME", &data_dir);
     cmd.env("XDG_CONFIG_HOME", &isolated_config_parent);
     cmd.env("NVIM_APPNAME", "nvim");
+    cmd.env("STEEL_IDE_DIR", &install_dir);
 
     // Prepend bundled bin/ to PATH so :term steel and child processes find it immediately
     let mut paths = vec![install_dir.join("bin")];
@@ -206,9 +207,23 @@ fn main() -> io::Result<()> {
         cmd.env("PATH", new_path);
     }
 
-    // Ensure config directory is in runtimepath and specify isolated init.lua
-    let config_dir_str = config_dir.to_string_lossy().replace('\\', "/");
+    // Ensure config directory is at front of runtimepath
+    let config_dir_str = config_dir.to_string_lossy().replace('\\', "/").replace(' ', "\\ ");
     cmd.arg("--cmd").arg(format!("set rtp^={}", config_dir_str));
+
+    // Ensure all bundled plugins are registered into runtimepath before init.lua executes
+    let plugins_dir = install_dir.join("plugins");
+    if plugins_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&plugins_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                if entry.path().is_dir() {
+                    let p_str = entry.path().to_string_lossy().replace('\\', "/").replace(' ', "\\ ");
+                    cmd.arg("--cmd").arg(format!("set rtp+={}", p_str));
+                }
+            }
+        }
+    }
+
     cmd.arg("-u").arg(&init_lua);
 
     // Process remaining user arguments

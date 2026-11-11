@@ -54,8 +54,30 @@ function M.ensure_repl()
   state.buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(state.win, state.buf)
 
+  -- Resolve steel executable path robustly
+  local function get_steel_cmd()
+    if vim.fn.executable("steel") == 1 then
+      return "steel"
+    end
+    if vim.fn.executable("steel.exe") == 1 then
+      return "steel.exe"
+    end
+    local steel_ide_dir = vim.env.STEEL_IDE_DIR
+    if steel_ide_dir then
+      local win_bin = steel_ide_dir .. "/bin/steel.exe"
+      if vim.fn.executable(win_bin) == 1 then
+        return win_bin
+      end
+      local unix_bin = steel_ide_dir .. "/bin/steel"
+      if vim.fn.executable(unix_bin) == 1 then
+        return unix_bin
+      end
+    end
+    return "steel"
+  end
+
   -- Start steel terminal
-  state.job_id = vim.fn.termopen("steel", {
+  state.job_id = vim.fn.termopen(get_steel_cmd(), {
     on_exit = function()
       state.job_id = nil
       state.buf = nil
@@ -114,13 +136,26 @@ function M.send_text(text)
     return
   end
 
-  -- Clean trailing whitespace and guarantee newline
+  -- Clean trailing whitespace
   text = vim.trim(text)
   if text == "" then
     return
   end
 
-  vim.fn.jobsend(job, text .. "\n")
+  local is_win = vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1
+  if is_win then
+    text = text:gsub("\r?\n", "\r\n")
+    if not text:match("\r\n$") then
+      text = text .. "\r\n"
+    end
+  else
+    text = text:gsub("\r\n", "\n")
+    if not text:match("\n$") then
+      text = text .. "\n"
+    end
+  end
+
+  vim.fn.jobsend(job, text)
 
   -- Auto scroll terminal window to bottom
   if state.win and vim.api.nvim_win_is_valid(state.win) and state.buf and vim.api.nvim_buf_is_valid(state.buf) then

@@ -25,10 +25,11 @@
 4. **AST 结构化几何编辑（Structural Editing）**：
    - 借助 `julienvincent/nvim-paredit`，精准支持吞噬（Slurp）、吐出（Barf）、圆/方括号包裹（Wrap）、脱壳解包（Splice）、相邻参数对调（Transpose）与列表切分（Split）。
 5. **零摩擦 Steel REPL 工作流**：
-   - 内置纯 Lua 极速 REPL 引擎（`lua/steel_repl.lua`），按下 **`Alt + Enter`**（或 `Ctrl + Enter`）：
+   - 内置纯 Lua 极速 REPL 引擎（`lua/steel_repl.lua`），按下 **`Alt + Enter`**（或 **`Alt + E`** / `Ctrl + Enter`）：
      - **普通模式**：自动通过 Tree-sitter 提取光标所在的当前 S 表达式（或顶级函数），立即送入 Steel REPL 求值并输出结果。
      - **可视模式**：将选中的代码块原样送入 REPL 求值。
-     - 未启动时自动在底部开辟终端 Split 窗口，启动即用，自动平滑滚屏。
+     - 未启动时自动在右侧开辟终端 Split 窗口，启动即用，自动平滑滚屏。
+     - Windows Terminal 用户因系统默认拦截 `Alt+Enter`（全屏切换），可使用专用防冲突热键 **`Alt + E`** 或 **`Space + s + e`** / **`Space + Enter`**。
 
 ---
 
@@ -65,7 +66,7 @@ steel-ide --extract /opt/steel-ide-runtime
 | 频级 / 占比 | Linux / Win | macOS (⌥) | 动作名称 | 对应底层实现 | 功能与效果 |
 |:---:|:---:|:---:|:---|:---|:---|
 | ⭐⭐⭐⭐⭐ (45%) | **`Alt + K`** | **`⌥ K`** | **向外扩选 (Expand)** | Treesitter `incremental_selection` | 自动严丝合缝选中当前 `(...)`，连按逐层外扩括号 |
-| ⭐⭐⭐⭐⭐ (45%) | **`Alt + Enter`<br>`Ctrl + Enter`** | **`⌥ ↵`<br>`⌘ ↵`** | **发射求值 (Eval REPL)** | `steel_repl.eval_*` | 将当前 S 表达式或选区代码送入 Steel REPL |
+| ⭐⭐⭐⭐⭐ (45%) | **`Alt + Enter`**<br>**`Alt + E`**<br>`Ctrl + Enter` | **`⌥ ↵`**<br>**`⌥ E`**<br>`⌘ ↵` | **发射求值 (Eval REPL)** | `steel_repl.eval_*` | 将当前 S 表达式或选区代码送入 Steel REPL（Win终端防冲突推荐 `Alt+E`） |
 | ⭐⭐⭐⭐ (25%) | **`Alt + H`** | **`⌥ H`** | **圆括号包裹 (Wrap Parens)** | `wrap_element_under_cursor("(", ")")` | `cards` $\rightarrow$ `(cards)`（支持可视选区包裹） |
 | ⭐⭐⭐⭐ (25%) | **`Alt + Shift + H`** | **`⌥ ⇧ H`** | **方括号包裹 (Wrap Square)** | `wrap_element_under_cursor("[", "]")` | `x 10` $\rightarrow$ `[x 10]`（写 `let*` 必备） |
 | ⭐⭐⭐⭐ (20%) | **`Alt + L`** | **`⌥ L`** | **向右吞噬 (Slurp)** | `paredit.api.slurp_forwards` | `(a b) c` $\rightarrow$ `(a b c)` |
@@ -89,6 +90,7 @@ steel-ide --extract /opt/steel-ide-runtime
 | 快捷键 | 作用区域 | 功能说明 | 助记 |
 |:---|:---|:---|:---|
 | **`Alt + R`** (或 `⌥ R`) | **右侧分屏** | **一键秒开 / 秒关 Steel REPL** | **R**EPL 单发开关 (终端内按直接收起返回代码) |
+| **`Alt + Enter`** / **`Alt + E`** | **代码区域** | **一键发射当前 S 表达式或选区求值** | 自动在右侧拉起 REPL 并滚屏 (Win终端推荐 `Alt+E`) |
 | **`Alt + T`** (或 `⌥ T`) | **底部底栏** | **一键秒开 / 秒关 系统 Shell 终端** | **T**erminal 单发开关 (保留终端执行会话) |
 | **`Ctrl + \``** (反引号) | **底部底栏** | **一键秒开 / 秒关 系统 Shell 终端** | VS Code 经典终端快捷键 |
 | **`Space + t + t`** | **底部底栏** | 展开 / 隐藏系统 Shell 终端 | **t**erminal **t**oggle |

@@ -10,15 +10,18 @@ pcall(function()
   vim.cmd.colorscheme("tokyonight-night")
 end)
 
--- 2. Treesitter: Scheme & AST Navigation
+-- 2. Treesitter: Initialize modules & configure Scheme AST Navigation
 pcall(function()
+  -- Explicitly initialize built-in modules (highlight, incremental_selection, etc.)
+  require("nvim-treesitter").setup()
+
   require("nvim-treesitter.configs").setup({
     ensure_installed = {},
     sync_install = false,
     auto_install = false,
     highlight = {
       enable = true,
-      additional_vim_regex_highlighting = false,
+      additional_vim_regex_highlighting = true,
     },
     incremental_selection = {
       enable = true,

@@ -11,24 +11,40 @@ if not vim.tbl_contains(vim.opt.rtp:get(), config_dir) then
 end
 
 -- 2. Add bundled and pre-installed plugins to runtimepath
-local candidate_dirs = {
-  root_dir .. "/plugins",
-  vim.env.LAZY_PLUGINS_PATH,
-  vim.fn.expand("~/.local/share/nvim/lazy"),
-  vim.fn.stdpath("data") .. "/lazy",
-}
+local candidate_dirs = {}
+local function add_cand(dir)
+  if dir and dir ~= "" then
+    table.insert(candidate_dirs, dir)
+    local norm = dir:gsub("\\", "/")
+    if norm ~= dir then
+      table.insert(candidate_dirs, norm)
+    end
+  end
+end
 
+add_cand(vim.env.STEEL_IDE_DIR and (vim.env.STEEL_IDE_DIR .. "/plugins"))
+add_cand(root_dir .. "/plugins")
+add_cand(config_dir .. "/plugins")
+add_cand(vim.env.LAZY_PLUGINS_PATH)
+add_cand(vim.fn.expand("~/.local/share/nvim/lazy"))
+add_cand(vim.fn.stdpath("data") .. "/lazy")
+
+local added = {}
 for _, pdir in ipairs(candidate_dirs) do
   if vim.fn.isdirectory(pdir) == 1 then
     for _, name in ipairs(vim.fn.readdir(pdir)) do
       local p = pdir .. "/" .. name
-      if vim.fn.isdirectory(p) == 1 and not vim.tbl_contains(vim.opt.rtp:get(), p) then
-        vim.opt.rtp:append(p)
+      local norm_p = (vim.fs and vim.fs.normalize) and vim.fs.normalize(p) or p:gsub("\\", "/")
+      if vim.fn.isdirectory(p) == 1 and not added[norm_p] then
+        added[norm_p] = true
+        if not vim.tbl_contains(vim.opt.rtp:get(), p) then
+          vim.opt.rtp:append(p)
+        end
         local plugin_sub = p .. "/plugin"
         if vim.fn.isdirectory(plugin_sub) == 1 then
           for _, f in ipairs(vim.fn.readdir(plugin_sub)) do
             if f:match("%.lua$") or f:match("%.vim$") then
-              vim.cmd("source " .. vim.fn.fnameescape(plugin_sub .. "/" .. f))
+              pcall(vim.cmd.source, plugin_sub .. "/" .. f)
             end
           end
         end
