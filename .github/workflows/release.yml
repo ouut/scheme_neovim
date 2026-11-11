@@ -122,17 +122,25 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
             ROOT_DIR=$(cygpath -m "$HOME")
-            echo "LAZY_PLUGINS_PATH=$ROOT_DIR/AppData/Local/nvim-data/lazy" >> $GITHUB_ENV
           else
-            echo "LAZY_PLUGINS_PATH=$HOME/.local/share/nvim/lazy" >> $GITHUB_ENV
+            ROOT_DIR="$HOME"
           fi
+          PLUGINS_DIR="$ROOT_DIR/bundled_plugins"
+          mkdir -p "$PLUGINS_DIR"
+          echo "LAZY_PLUGINS_PATH=$PLUGINS_DIR" >> $GITHUB_ENV
+          export LAZY_PLUGINS_PATH="$PLUGINS_DIR"
+
+          # Clone plugins directly for 100% offline self-contained bundling
+          git clone --depth 1 https://github.com/folke/tokyonight.nvim "$PLUGINS_DIR/tokyonight.nvim"
+          git clone --depth 1 -b master https://github.com/nvim-treesitter/nvim-treesitter "$PLUGINS_DIR/nvim-treesitter"
+          git clone --depth 1 https://github.com/julienvincent/nvim-paredit "$PLUGINS_DIR/nvim-paredit"
+          git clone --depth 1 https://github.com/ironcamel/strict-paredit.nvim "$PLUGINS_DIR/strict-paredit.nvim"
 
           # Verify binaries work
           "$NVIM_BIN_PATH" --version
           "$STEEL_BIN_PATH" --version
 
-          # Install plugins via lazy.nvim and compile Tree-sitter scheme parser
-          "$NVIM_BIN_PATH" --headless -u init.lua "+Lazy! sync" +qa || true
+          # Pre-compile Tree-sitter scheme parser
           "$NVIM_BIN_PATH" --headless -u init.lua "+TSInstallSync scheme query" +qa || true
 
       # -----------------------------------------------------------------------

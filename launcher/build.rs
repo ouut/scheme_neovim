@@ -190,12 +190,13 @@ fn main() {
 
     for candidate in lazy_dir_candidates {
         if candidate.exists() {
-            println!("cargo:warning=Bundling lazy plugins from: {}", candidate.display());
+            println!("cargo:warning=Bundling plugins from: {}", candidate.display());
             for entry in fs::read_dir(&candidate).unwrap().filter_map(|e| e.ok()) {
                 let path = entry.path();
                 if path.is_dir() {
                     let name = entry.file_name();
-                    copy_dir_filtered(&path, &staging_dir.join("data/nvim/lazy").join(name)).unwrap();
+                    copy_dir_filtered(&path, &staging_dir.join("plugins").join(&name)).unwrap();
+                    let _ = copy_dir_filtered(&path, &staging_dir.join("data/nvim/lazy").join(&name));
                 }
             }
             break;
@@ -205,7 +206,7 @@ fn main() {
     // Harmonize Tree-sitter parsers:
     // 1. Ensure scheme and query parsers are copied to lib/nvim/parser so Neovim can load them natively.
     // 2. On Windows, ensure every parser has both .dll and .so copies.
-    let ts_parser_dir = staging_dir.join("data/nvim/lazy/nvim-treesitter/parser");
+    let ts_parser_dir = staging_dir.join("plugins/nvim-treesitter/parser");
     let lib_parser_dir = staging_dir.join("lib/nvim/parser");
     fs::create_dir_all(&lib_parser_dir).unwrap();
 
