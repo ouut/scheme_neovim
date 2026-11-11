@@ -49,14 +49,38 @@ function M.ensure_repl()
   return state.job_id
 end
 
----Toggle Steel REPL window visibility
-function M.toggle()
+---Close/Hide Steel REPL window (keeps background process alive)
+function M.close()
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_win_close(state.win, true)
     state.win = nil
+  end
+end
+
+---Toggle Steel REPL window visibility
+function M.toggle()
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    M.close()
   else
     M.ensure_repl()
   end
+end
+
+---Kill Steel REPL process and close window
+function M.kill()
+  if state.job_id then
+    pcall(vim.fn.jobstop, state.job_id)
+    state.job_id = nil
+  end
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    vim.api.nvim_win_close(state.win, true)
+    state.win = nil
+  end
+  if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+    vim.api.nvim_buf_delete(state.buf, { force = true })
+    state.buf = nil
+  end
+  vim.notify("Steel REPL terminated", vim.log.levels.INFO)
 end
 
 ---Send raw text string to the Steel REPL
