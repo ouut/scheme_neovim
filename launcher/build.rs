@@ -115,11 +115,46 @@ fn main() {
     let nvim_runtime = find_file(&nvim_runtime_defaults, "NVIM_RUNTIME_PATH")
         .expect("Neovim runtime directory not found. Set NVIM_RUNTIME_PATH.");
 
-    // Copy executables
-    let nvim_dst = staging_dir.join(format!("bin/nvim{}", exe_suffix));
+    // Copy executables and DLLs
+    let canonical_nvim_bin = fs::canonicalize(&nvim_bin).unwrap_or(nvim_bin.clone());
+    let nvim_bin_dir = canonical_nvim_bin.parent();
+
+    let is_system_bin = if let Some(dir) = nvim_bin_dir {
+        let s = dir.to_string_lossy().to_lowercase();
+        s == "/usr/bin" || s == "/usr/local/bin" || s == "/bin" || s == "c:\\windows\\system32"
+    } else {
+        true
+    };
+
+    if !is_system_bin {
+        if let Some(dir) = nvim_bin_dir {
+            println!("cargo:warning=Copying Neovim binaries and DLLs from: {}", dir.display());
+            for entry in fs::read_dir(dir).unwrap().filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_file() {
+                    let filename = entry.file_name();
+                    let dst = staging_dir.join("bin").join(&filename);
+                    let _ = copy_executable(&path, &dst);
+                }
+            }
+        }
+    } else {
+        let nvim_dst = staging_dir.join(format!("bin/nvim{}", exe_suffix));
+        copy_executable(&canonical_nvim_bin, &nvim_dst).unwrap();
+    }
+
+    // Copy Steel Scheme binary
     let steel_dst = staging_dir.join(format!("bin/steel{}", exe_suffix));
-    copy_executable(&nvim_bin, &nvim_dst).unwrap();
     copy_executable(&steel_bin, &steel_dst).unwrap();
+
+    // Copy Neovim lib directory if present (built-in parsers c, lua, vim, markdown, query, etc.)
+    if let Some(nvim_root) = canonical_nvim_bin.parent().and_then(|p| p.parent()) {
+        let nvim_lib = nvim_root.join("lib");
+        if nvim_lib.exists() && !is_system_bin {
+            println!("cargo:warning=Copying Neovim lib directory from: {}", nvim_lib.display());
+            copy_dir_filtered(&nvim_lib, &staging_dir.join("lib")).unwrap();
+        }
+    }
 
     // Copy Neovim runtime
     copy_dir_filtered(&nvim_runtime, &staging_dir.join("share/nvim/runtime")).unwrap();

@@ -38,12 +38,20 @@ fn get_base_dir() -> PathBuf {
 }
 
 fn ensure_extracted(install_dir: &Path) -> io::Result<()> {
+    let marker = install_dir.join(".complete");
     let suffix = exe_suffix();
     let nvim_bin = install_dir.join(format!("bin/nvim{}", suffix));
     let steel_bin = install_dir.join(format!("bin/steel{}", suffix));
     let init_lua = install_dir.join("config/init.lua");
 
-    if nvim_bin.exists() && steel_bin.exists() && init_lua.exists() {
+    let mut is_valid = marker.exists() && nvim_bin.exists() && steel_bin.exists() && init_lua.exists();
+    if cfg!(windows) && is_valid {
+        if !install_dir.join("bin/lua51.dll").exists() {
+            is_valid = false;
+        }
+    }
+
+    if is_valid {
         return Ok(());
     }
 
@@ -86,6 +94,9 @@ fn ensure_extracted(install_dir: &Path) -> io::Result<()> {
             }
         }
     }
+
+    // Write installation completion marker
+    fs::write(&marker, b"complete\n")?;
 
     eprintln!("[steel-ide] Runtime initialized successfully!");
     Ok(())
@@ -196,7 +207,8 @@ fn main() -> io::Result<()> {
     }
 
     // Ensure config directory is in runtimepath and specify isolated init.lua
-    cmd.arg("--cmd").arg(format!("set rtp^={}", config_dir.display()));
+    let config_dir_str = config_dir.to_string_lossy().replace('\\', "/");
+    cmd.arg("--cmd").arg(format!("set rtp^={}", config_dir_str));
     cmd.arg("-u").arg(&init_lua);
 
     // Process remaining user arguments
