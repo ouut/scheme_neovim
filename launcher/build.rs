@@ -23,7 +23,7 @@ fn find_file(names: &[&str], env_var: &str) -> Option<PathBuf> {
     None
 }
 
-fn copy_and_strip(src: &Path, dst: &Path) -> io::Result<()> {
+fn copy_executable(src: &Path, dst: &Path) -> io::Result<()> {
     fs::copy(src, dst)?;
     #[cfg(unix)]
     {
@@ -84,27 +84,42 @@ fn main() {
     fs::create_dir_all(staging_dir.join("config")).unwrap();
     fs::create_dir_all(staging_dir.join("data/nvim/lazy")).unwrap();
 
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let is_windows = target_os == "windows";
+    let exe_suffix = if is_windows { ".exe" } else { "" };
+
     // 1. Locate nvim binary
-    let nvim_bin = find_file(
-        &["/opt/nvim/bin/nvim", "/usr/local/bin/nvim", "/usr/bin/nvim"],
-        "NVIM_BIN_PATH",
-    ).expect("Neovim binary not found. Set NVIM_BIN_PATH.");
+    let nvim_default_paths = if is_windows {
+        vec!["C:\\tools\\neovim\\bin\\nvim.exe", "nvim.exe"]
+    } else {
+        vec!["/opt/nvim/bin/nvim", "/usr/local/bin/nvim", "/usr/bin/nvim", "nvim"]
+    };
+    let nvim_bin = find_file(&nvim_default_paths, "NVIM_BIN_PATH")
+        .expect("Neovim binary not found. Set NVIM_BIN_PATH.");
 
     // 2. Locate steel binary
-    let steel_bin = find_file(
-        &["/root/.cargo/bin/steel", "/usr/local/bin/steel", "/usr/bin/steel"],
-        "STEEL_BIN_PATH",
-    ).expect("Steel Scheme binary not found. Set STEEL_BIN_PATH.");
+    let steel_default_paths = if is_windows {
+        vec!["steel.exe"]
+    } else {
+        vec!["/root/.cargo/bin/steel", "/usr/local/bin/steel", "/usr/bin/steel", "steel"]
+    };
+    let steel_bin = find_file(&steel_default_paths, "STEEL_BIN_PATH")
+        .expect("Steel Scheme binary not found. Set STEEL_BIN_PATH.");
 
     // 3. Locate nvim runtime
-    let nvim_runtime = find_file(
-        &["/opt/nvim/share/nvim/runtime", "/usr/share/nvim/runtime", "/usr/local/share/nvim/runtime"],
-        "NVIM_RUNTIME_PATH",
-    ).expect("Neovim runtime directory not found. Set NVIM_RUNTIME_PATH.");
+    let nvim_runtime_defaults = if is_windows {
+        vec!["C:\\tools\\neovim\\share\\nvim\\runtime"]
+    } else {
+        vec!["/opt/nvim/share/nvim/runtime", "/usr/share/nvim/runtime", "/usr/local/share/nvim/runtime"]
+    };
+    let nvim_runtime = find_file(&nvim_runtime_defaults, "NVIM_RUNTIME_PATH")
+        .expect("Neovim runtime directory not found. Set NVIM_RUNTIME_PATH.");
 
-    // Copy and strip executables
-    copy_and_strip(&nvim_bin, &staging_dir.join("bin/nvim")).unwrap();
-    copy_and_strip(&steel_bin, &staging_dir.join("bin/steel")).unwrap();
+    // Copy executables
+    let nvim_dst = staging_dir.join(format!("bin/nvim{}", exe_suffix));
+    let steel_dst = staging_dir.join(format!("bin/steel{}", exe_suffix));
+    copy_executable(&nvim_bin, &nvim_dst).unwrap();
+    copy_executable(&steel_bin, &steel_dst).unwrap();
 
     // Copy Neovim runtime
     copy_dir_filtered(&nvim_runtime, &staging_dir.join("share/nvim/runtime")).unwrap();
@@ -123,15 +138,29 @@ fn main() {
     }
 
     // Copy lazy plugins (nvim-treesitter with scheme parser, nvim-paredit, strict-paredit, etc.)
-    let home_dir = env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let lazy_dir = PathBuf::from(&home_dir).join(".local/share/nvim/lazy");
-    if lazy_dir.exists() {
-        for entry in fs::read_dir(&lazy_dir).unwrap().filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if path.is_dir() {
-                let name = entry.file_name();
-                copy_dir_filtered(&path, &staging_dir.join("data/nvim/lazy").join(name)).unwrap();
+    let mut lazy_dir_candidates = Vec::new();
+    if let Ok(custom) = env::var("LAZY_PLUGINS_PATH") {
+        lazy_dir_candidates.push(PathBuf::from(custom));
+    }
+    if let Ok(local_appdata) = env::var("LOCALAPPDATA") {
+        lazy_dir_candidates.push(PathBuf::from(local_appdata).join("nvim-data/lazy"));
+    }
+    if let Ok(home) = env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
+        lazy_dir_candidates.push(PathBuf::from(&home).join(".local/share/nvim/lazy"));
+        lazy_dir_candidates.push(PathBuf::from(&home).join("AppData/Local/nvim-data/lazy"));
+    }
+
+    for candidate in lazy_dir_candidates {
+        if candidate.exists() {
+            println!("cargo:warning=Bundling lazy plugins from: {}", candidate.display());
+            for entry in fs::read_dir(&candidate).unwrap().filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    let name = entry.file_name();
+                    copy_dir_filtered(&path, &staging_dir.join("data/nvim/lazy").join(name)).unwrap();
+                }
             }
+            break;
         }
     }
 

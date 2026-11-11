@@ -9,6 +9,14 @@ use tar::Archive;
 
 static BUNDLE_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/bundle.tar.gz"));
 
+fn exe_suffix() -> &'static str {
+    if cfg!(windows) {
+        ".exe"
+    } else {
+        ""
+    }
+}
+
 fn compute_bundle_hash() -> String {
     let mut hasher = Sha256::new();
     hasher.update(BUNDLE_BYTES);
@@ -30,8 +38,9 @@ fn get_base_dir() -> PathBuf {
 }
 
 fn ensure_extracted(install_dir: &Path) -> io::Result<()> {
-    let nvim_bin = install_dir.join("bin/nvim");
-    let steel_bin = install_dir.join("bin/steel");
+    let suffix = exe_suffix();
+    let nvim_bin = install_dir.join(format!("bin/nvim{}", suffix));
+    let steel_bin = install_dir.join(format!("bin/steel{}", suffix));
     let init_lua = install_dir.join("config/init.lua");
 
     if nvim_bin.exists() && steel_bin.exists() && init_lua.exists() {
@@ -146,8 +155,9 @@ fn main() -> io::Result<()> {
 
     ensure_extracted(&install_dir)?;
 
-    let nvim_bin = install_dir.join("bin/nvim");
-    let steel_bin = install_dir.join("bin/steel");
+    let suffix = exe_suffix();
+    let nvim_bin = install_dir.join(format!("bin/nvim{}", suffix));
+    let steel_bin = install_dir.join(format!("bin/steel{}", suffix));
     let config_dir = install_dir.join("config");
     let init_lua = config_dir.join("init.lua");
     let vimruntime = install_dir.join("share/nvim/runtime");
@@ -177,9 +187,13 @@ fn main() -> io::Result<()> {
     cmd.env("NVIM_APPNAME", "nvim");
 
     // Prepend bundled bin/ to PATH so :term steel and child processes find it immediately
-    let current_path = env::var("PATH").unwrap_or_default();
-    let new_path = format!("{}:{}", install_dir.join("bin").display(), current_path);
-    cmd.env("PATH", new_path);
+    let mut paths = vec![install_dir.join("bin")];
+    if let Some(current) = env::var_os("PATH") {
+        paths.extend(env::split_paths(&current));
+    }
+    if let Ok(new_path) = env::join_paths(paths) {
+        cmd.env("PATH", new_path);
+    }
 
     // Ensure config directory is in runtimepath and specify isolated init.lua
     cmd.arg("--cmd").arg(format!("set rtp^={}", config_dir.display()));
