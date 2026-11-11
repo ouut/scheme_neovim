@@ -1,11 +1,33 @@
 -- Steel Scheme REPL Engine for Neovim
 local M = {}
 
+M.config = {
+  position = "right", -- "right" (垂直右侧分屏) 或 "bottom" (水平底部底栏)
+  size = 65,          -- 宽度 (字符列数，若为 right) 或 高度 (行数，若为 bottom)
+}
+
 local state = {
   buf = nil,
   win = nil,
   job_id = nil,
 }
+
+---Configure REPL engine options
+---@param opts table|nil
+function M.setup(opts)
+  M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+end
+
+---Internal helper: Open the REPL split window at configured position
+local function open_split()
+  if M.config.position == "right" then
+    local width = M.config.size or 65
+    vim.cmd(string.format("botright vertical %dsplit", width))
+  else
+    local height = M.config.size or 12
+    vim.cmd(string.format("botright %dsplit", height))
+  end
+end
 
 ---Ensure Steel REPL terminal buffer and window are open and ready
 ---@return number|nil job_id
@@ -14,7 +36,7 @@ function M.ensure_repl()
   if state.buf and vim.api.nvim_buf_is_valid(state.buf) and state.job_id then
     -- Check if window exists
     if not (state.win and vim.api.nvim_win_is_valid(state.win)) then
-      vim.cmd("botright 12split")
+      open_split()
       state.win = vim.api.nvim_get_current_win()
       vim.api.nvim_win_set_buf(state.win, state.buf)
       -- Return focus to previous window
@@ -26,8 +48,8 @@ function M.ensure_repl()
   -- Save current window
   local prev_win = vim.api.nvim_get_current_win()
 
-  -- Open bottom split
-  vim.cmd("botright 12split")
+  -- Open split window according to configuration
+  open_split()
   state.win = vim.api.nvim_get_current_win()
   state.buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(state.win, state.buf)
