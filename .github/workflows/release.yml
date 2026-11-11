@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag Name (e.g. v0.1.0)'
+        description: 'Release Tag Name (e.g. v0.2.1)'
         required: false
-        default: 'v0.1.0'
+        default: 'v0.2.1'
 
 permissions:
   contents: write
@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 1. Linux x86_64
+          # 1. Linux x86_64 (Ubuntu)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary_name: steel-ide
@@ -42,17 +42,7 @@ jobs:
             steel_url: https://github.com/mattwparas/steel/releases/download/v0.8.2/steel-interpreter-aarch64-apple-darwin.tar.xz
             steel_archive_type: tar_xz
 
-          # 3. macOS Intel (x86_64)
-          - os: macos-13
-            target: x86_64-apple-darwin
-            binary_name: steel-ide
-            release_name: steel-ide-macos-x86_64
-            nvim_url: https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-macos-x86_64.tar.gz
-            nvim_archive_type: tar
-            steel_url: cargo
-            steel_archive_type: cargo
-
-          # 4. Windows x86_64
+          # 3. Windows x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             binary_name: steel-ide.exe
@@ -72,63 +62,78 @@ jobs:
           targets: ${{ matrix.target }}
 
       # -----------------------------------------------------------------------
-      # Step 1: Install Official Neovim 0.10.4
+      # Step 1: Install Official Prebuilt Neovim 0.10.4
       # -----------------------------------------------------------------------
       - name: Install Prebuilt Neovim
         shell: bash
         run: |
-          mkdir -p $HOME/opt_nvim
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ROOT_DIR=$(cygpath -m "$HOME")
+          else
+            ROOT_DIR="$HOME"
+          fi
+          mkdir -p "$ROOT_DIR/opt_nvim"
+
           if [ "${{ matrix.nvim_archive_type }}" = "tar" ]; then
-            curl -fLo nvim_archive.tar.gz ${{ matrix.nvim_url }}
-            tar -xzf nvim_archive.tar.gz -C $HOME/opt_nvim --strip-components=1
-            echo "$HOME/opt_nvim/bin" >> $GITHUB_PATH
-            echo "NVIM_BIN_PATH=$HOME/opt_nvim/bin/nvim" >> $GITHUB_ENV
-            echo "NVIM_RUNTIME_PATH=$HOME/opt_nvim/share/nvim/runtime" >> $GITHUB_ENV
+            curl -fLo nvim_archive.tar.gz "${{ matrix.nvim_url }}"
+            tar -xzf nvim_archive.tar.gz -C "$ROOT_DIR/opt_nvim" --strip-components=1
+            echo "$ROOT_DIR/opt_nvim/bin" >> $GITHUB_PATH
+            echo "NVIM_BIN_PATH=$ROOT_DIR/opt_nvim/bin/nvim" >> $GITHUB_ENV
+            echo "NVIM_RUNTIME_PATH=$ROOT_DIR/opt_nvim/share/nvim/runtime" >> $GITHUB_ENV
           elif [ "${{ matrix.nvim_archive_type }}" = "zip" ]; then
-            curl -fLo nvim_archive.zip ${{ matrix.nvim_url }}
-            unzip -q nvim_archive.zip -d $HOME/opt_nvim_tmp
-            mv $HOME/opt_nvim_tmp/*/* $HOME/opt_nvim/
-            echo "$HOME/opt_nvim/bin" >> $GITHUB_PATH
-            echo "NVIM_BIN_PATH=$HOME/opt_nvim/bin/nvim.exe" >> $GITHUB_ENV
-            echo "NVIM_RUNTIME_PATH=$HOME/opt_nvim/share/nvim/runtime" >> $GITHUB_ENV
+            curl -fLo nvim_archive.zip "${{ matrix.nvim_url }}"
+            unzip -q nvim_archive.zip -d "$ROOT_DIR/opt_nvim_tmp"
+            mv "$ROOT_DIR/opt_nvim_tmp/nvim-win64"/* "$ROOT_DIR/opt_nvim/"
+            echo "$ROOT_DIR/opt_nvim/bin" >> $GITHUB_PATH
+            echo "NVIM_BIN_PATH=$ROOT_DIR/opt_nvim/bin/nvim.exe" >> $GITHUB_ENV
+            echo "NVIM_RUNTIME_PATH=$ROOT_DIR/opt_nvim/share/nvim/runtime" >> $GITHUB_ENV
           fi
 
       # -----------------------------------------------------------------------
-      # Step 2: Install Official Steel Scheme 0.8.2
+      # Step 2: Install Official Prebuilt Steel Scheme 0.8.2
       # -----------------------------------------------------------------------
       - name: Install Prebuilt Steel Scheme
         shell: bash
         run: |
-          mkdir -p $HOME/opt_steel
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ROOT_DIR=$(cygpath -m "$HOME")
+          else
+            ROOT_DIR="$HOME"
+          fi
+          mkdir -p "$ROOT_DIR/opt_steel"
+
           if [ "${{ matrix.steel_archive_type }}" = "tar_xz" ]; then
-            curl -fLo steel_archive.tar.xz ${{ matrix.steel_url }}
-            tar -xJf steel_archive.tar.xz -C $HOME/opt_steel --strip-components=1
-            echo "$HOME/opt_steel" >> $GITHUB_PATH
-            echo "STEEL_BIN_PATH=$HOME/opt_steel/steel" >> $GITHUB_ENV
+            curl -fLo steel_archive.tar.xz "${{ matrix.steel_url }}"
+            tar -xJf steel_archive.tar.xz -C "$ROOT_DIR/opt_steel" --strip-components=1
+            echo "$ROOT_DIR/opt_steel" >> $GITHUB_PATH
+            echo "STEEL_BIN_PATH=$ROOT_DIR/opt_steel/steel" >> $GITHUB_ENV
           elif [ "${{ matrix.steel_archive_type }}" = "zip" ]; then
-            curl -fLo steel_archive.zip ${{ matrix.steel_url }}
-            unzip -q steel_archive.zip -d $HOME/opt_steel_tmp
-            mv $HOME/opt_steel_tmp/*/* $HOME/opt_steel/
-            echo "$HOME/opt_steel" >> $GITHUB_PATH
-            echo "STEEL_BIN_PATH=$HOME/opt_steel/steel.exe" >> $GITHUB_ENV
-          elif [ "${{ matrix.steel_archive_type }}" = "cargo" ]; then
-            cargo install steel-lang --locked
-            echo "STEEL_BIN_PATH=$HOME/.cargo/bin/steel" >> $GITHUB_ENV
+            curl -fLo steel_archive.zip "${{ matrix.steel_url }}"
+            unzip -q -o steel_archive.zip -d "$ROOT_DIR/opt_steel"
+            echo "$ROOT_DIR/opt_steel" >> $GITHUB_PATH
+            echo "STEEL_BIN_PATH=$ROOT_DIR/opt_steel/steel.exe" >> $GITHUB_ENV
           fi
 
       # -----------------------------------------------------------------------
-      # Step 3: Bootstrap and Pre-compile Plugins & Treesitter Parser
+      # Step 3: Bootstrap Plugins & Treesitter Scheme Parser
       # -----------------------------------------------------------------------
       - name: Pre-install Neovim Plugins and Scheme Parser
         shell: bash
         run: |
-          # Verify nvim and steel binaries work
-          $NVIM_BIN_PATH --version
-          $STEEL_BIN_PATH --version
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ROOT_DIR=$(cygpath -m "$HOME")
+            echo "LAZY_PLUGINS_PATH=$ROOT_DIR/AppData/Local/nvim-data/lazy" >> $GITHUB_ENV
+          else
+            echo "LAZY_PLUGINS_PATH=$HOME/.local/share/nvim/lazy" >> $GITHUB_ENV
+          fi
+
+          # Verify binaries work
+          "$NVIM_BIN_PATH" --version
+          "$STEEL_BIN_PATH" --version
 
           # Install plugins via lazy.nvim and compile Tree-sitter scheme parser
-          $NVIM_BIN_PATH --headless -u init.lua "+Lazy! sync" +qa || true
-          $NVIM_BIN_PATH --headless -u init.lua "+TSInstallSync scheme query" +qa || true
+          "$NVIM_BIN_PATH" --headless -u init.lua "+Lazy! sync" +qa || true
+          "$NVIM_BIN_PATH" --headless -u init.lua "+TSInstallSync scheme query" +qa || true
 
       # -----------------------------------------------------------------------
       # Step 4: Build Standalone All-in-One Binary with Rust
