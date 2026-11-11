@@ -202,6 +202,47 @@ fn main() {
         }
     }
 
+    // Harmonize Tree-sitter parsers:
+    // 1. Ensure scheme and query parsers are copied to lib/nvim/parser so Neovim can load them natively.
+    // 2. On Windows, ensure every parser has both .dll and .so copies.
+    let ts_parser_dir = staging_dir.join("data/nvim/lazy/nvim-treesitter/parser");
+    let lib_parser_dir = staging_dir.join("lib/nvim/parser");
+    fs::create_dir_all(&lib_parser_dir).unwrap();
+
+    if ts_parser_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&ts_parser_dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.is_file() {
+                    let filename = path.file_name().unwrap();
+                    let _ = fs::copy(&path, lib_parser_dir.join(filename));
+                }
+            }
+        }
+    }
+
+    if is_windows {
+        for pdir in &[&ts_parser_dir, &lib_parser_dir] {
+            if pdir.exists() {
+                if let Ok(entries) = fs::read_dir(pdir) {
+                    for entry in entries.filter_map(|e| e.ok()) {
+                        let path = entry.path();
+                        if path.is_file() {
+                            let filename = path.file_name().unwrap().to_string_lossy().to_string();
+                            if filename.ends_with(".so") {
+                                let dll_name = format!("{}.dll", &filename[..filename.len() - 3]);
+                                let _ = fs::copy(&path, pdir.join(&dll_name));
+                            } else if filename.ends_with(".dll") {
+                                let so_name = format!("{}.so", &filename[..filename.len() - 4]);
+                                let _ = fs::copy(&path, pdir.join(&so_name));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Create tar.gz bundle
     let tar_gz_path = out_dir.join("bundle.tar.gz");
     let tar_gz_file = File::create(&tar_gz_path).unwrap();
