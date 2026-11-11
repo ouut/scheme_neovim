@@ -82,12 +82,18 @@ steel-ide --extract /opt/steel-ide-runtime
 
 ---
 
-## 🛠️ REPL 与窗口管理
+## 🛠️ REPL 与 Shell 终端管理
 
-- **`<leader>so`** (`Space + s + o`)：展开 / 收起 Steel REPL 窗口（保留后台变量与函数定义）
-- **`<leader>sc`** (`Space + s + c`)：关闭（隐藏）REPL 窗口
-- **`<leader>sq`** (`Space + s + q`)：彻底杀死并重启 Steel REPL 进程
-- **`<leader>sb`** (`Space + s + b`)：将当前整个文件的代码全量送入 REPL 执行
+| 快捷键 | 作用区域 | 功能说明 | 助记 |
+|:---|:---|:---|:---|
+| **`Alt + R`** (或 `⌥ R`) | **右侧分屏** | **一键秒开 / 秒关 Steel REPL** | **R**EPL 单发开关 (终端内按直接收起返回代码) |
+| **`Alt + T`** (或 `⌥ T`) | **底部底栏** | **一键秒开 / 秒关 系统 Shell 终端** | **T**erminal 单发开关 (保留终端执行会话) |
+| **`Ctrl + \``** (反引号) | **底部底栏** | **一键秒开 / 秒关 系统 Shell 终端** | VS Code 经典终端快捷键 |
+| **`Space + t + t`** | **底部底栏** | 展开 / 隐藏系统 Shell 终端 | **t**erminal **t**oggle |
+| **`Space + s + o`** | **右侧分屏** | 展开 / 隐藏 Steel REPL 窗口 | **s**teel **o**pen |
+| **`Space + s + c`** | **右侧分屏** | 关闭 (隐藏) Steel REPL 窗口 | **s**teel **c**lose |
+| **`Space + s + q`** | **右侧分屏** | 彻底杀死并重启 Steel REPL 进程 | **s**teel **q**uit |
+| **`Space + s + b`** | 当前文件 | 将当前整个文件的代码全量送入 REPL 执行 | **s**end **b**uffer |
 
 ---
 
