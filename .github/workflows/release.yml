@@ -33,7 +33,7 @@ jobs:
             steel_archive_type: tar_xz
 
           # 2. macOS Apple Silicon (M1/M2/M3/M4)
-          - os: macos-14
+          - os: macos-latest
             target: aarch64-apple-darwin
             binary_name: steel-ide
             release_name: steel-ide-macos-arm64
