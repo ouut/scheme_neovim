@@ -1099,6 +1099,109 @@ function M.cycle_tab(direction)
   vim.api.nvim_set_current_buf(bufs[next_idx].bufnr)
 end
 
+--- 保存当前文件 (Ctrl + S)
+function M.save_file()
+  local buf = vim.api.nvim_get_current_buf()
+  local name = vim.api.nvim_buf_get_name(buf)
+  if name == "" then
+    local input = vim.fn.input("Save as: ")
+    if input and input ~= "" then
+      local ok, err = pcall(vim.cmd, "write " .. vim.fn.fnameescape(input))
+      if ok then
+        vim.notify("Saved as: " .. input, vim.log.levels.INFO)
+      else
+        vim.notify("Save failed: " .. tostring(err), vim.log.levels.ERROR)
+      end
+    else
+      vim.notify("Save cancelled.", vim.log.levels.WARN)
+    end
+  else
+    local ok, err = pcall(vim.cmd, "update")
+    if ok then
+      vim.notify("Saved " .. vim.fn.fnamemodify(name, ":t"), vim.log.levels.INFO)
+    else
+      vim.notify("Save failed: " .. tostring(err), vim.log.levels.ERROR)
+    end
+  end
+end
+
+--- 安全退出 IDE (Ctrl + Q)
+function M.safe_quit()
+  local modified_bufs = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].modified and vim.bo[buf].buftype == "" then
+      table.insert(modified_bufs, buf)
+    end
+  end
+
+  if #modified_bufs > 0 then
+    local names = {}
+    for _, b in ipairs(modified_bufs) do
+      local n = vim.api.nvim_buf_get_name(b)
+      table.insert(names, n == "" and "[No Name]" or vim.fn.fnamemodify(n, ":t"))
+    end
+    local msg = string.format("You have %d unsaved buffer(s) (%s). Save before quitting?", #modified_bufs, table.concat(names, ", "))
+    local choice = vim.fn.confirm(msg, "&Yes\n&No (discard)\n&Cancel", 1)
+    if choice == 1 then
+      local ok, err = pcall(vim.cmd, "wa")
+      if ok then
+        vim.cmd("qa")
+      else
+        vim.notify("Save failed: " .. tostring(err), vim.log.levels.ERROR)
+      end
+    elseif choice == 2 then
+      vim.cmd("qa!")
+    else
+      return
+    end
+  else
+    vim.cmd("qa")
+  end
+end
+
+--- 强制退出 IDE (Ctrl + Shift + Q)
+function M.force_quit()
+  vim.cmd("qa!")
+end
+
+--- 关闭当前标签页 / 缓冲区 (Ctrl + W)
+function M.close_tab()
+  local cur_buf = vim.api.nvim_get_current_buf()
+  if vim.bo[cur_buf].buftype ~= "" then
+    pcall(vim.cmd, "close")
+    return
+  end
+
+  local listed_bufs = vim.tbl_filter(function(b)
+    return vim.api.nvim_buf_is_loaded(b) and vim.bo[b].buflisted and vim.bo[b].buftype == ""
+  end, vim.api.nvim_list_bufs())
+
+  if #listed_bufs <= 1 then
+    M.safe_quit()
+  else
+    if vim.bo[cur_buf].modified then
+      local name = vim.api.nvim_buf_get_name(cur_buf)
+      local disp = name == "" and "[No Name]" or vim.fn.fnamemodify(name, ":t")
+      local choice = vim.fn.confirm("Save changes to " .. disp .. " before closing?", "&Yes\n&No (discard)\n&Cancel", 1)
+      if choice == 1 then
+        local ok = pcall(vim.cmd, "update")
+        if ok then
+          vim.cmd("bdelete " .. cur_buf)
+        end
+      elseif choice == 2 then
+        vim.cmd("bdelete! " .. cur_buf)
+      end
+    else
+      vim.cmd("bdelete " .. cur_buf)
+    end
+  end
+end
+
+--- 全选当前缓冲区 (Ctrl + A)
+function M.select_all()
+  vim.cmd("normal! ggVG")
+end
+
 -- -----------------------------------------------------------------------------
 -- 五、 快捷键与物理守卫绑定主注册函数 (Setup & Bindings)
 -- 彻底废除 Vim 模态：全套按键在 Normal (n)、Visual (v)、Insert (i) 统一单发生效
@@ -1233,6 +1336,37 @@ function M.setup()
     map_global({ "<M-S-Down>", "<M-Down>" }, M.focus_terminal, "Focus Terminal (Alt+Shift+Down / Alt+Down)")
     map_global({ "<M-S-Left>", "<M-Left>" }, function() M.cycle_tab(-1) end, "Prev Tab Cycle (Alt+Shift+Left / Alt+Left)")
     map_global({ "<M-S-Right>", "<M-Right>" }, function() M.cycle_tab(1) end, "Next Tab Cycle (Alt+Shift+Right / Alt+Right)")
+
+    -- 通用无模态文件生命周期与编辑快捷键 (Universal Modeless Shortcuts)
+    -- Ctrl + S: 保存文件
+    map_alt({ "<C-s>", "<C-S>" }, M.save_file, "Save File (Ctrl+S)")
+
+    -- Ctrl + Q: 安全退出 IDE (有未保存变动时弹窗确认)
+    map_global({ "<C-q>", "<C-Q>" }, M.safe_quit, "Safe Quit IDE (Ctrl+Q)")
+
+    -- Ctrl + Shift + Q: 强制退出 IDE (放弃修改直接退出)
+    map_global({ "<C-S-q>", "<C-S-Q>" }, M.force_quit, "Force Quit IDE (Ctrl+Shift+Q)")
+
+    -- Ctrl + W: 关闭当前文件标签页 (若只剩一个则安全退出)
+    map_alt({ "<C-w>", "<C-W>" }, M.close_tab, "Close Tab / Buffer (Ctrl+W)")
+
+    -- Ctrl + Z: 撤销 (Undo)
+    vim.keymap.set({ "n", "v" }, "<C-z>", "<cmd>undo<CR>", vim.tbl_extend("force", opts, { desc = "Undo (Ctrl+Z)" }))
+    vim.keymap.set("i", "<C-z>", "<C-o>u", vim.tbl_extend("force", opts, { desc = "Undo (Ctrl+Z)" }))
+
+    -- Ctrl + Y / Ctrl + Shift + Z: 重做 (Redo)
+    vim.keymap.set({ "n", "v" }, "<C-y>", "<cmd>redo<CR>", vim.tbl_extend("force", opts, { desc = "Redo (Ctrl+Y)" }))
+    vim.keymap.set({ "n", "v" }, "<C-S-z>", "<cmd>redo<CR>", vim.tbl_extend("force", opts, { desc = "Redo (Ctrl+Shift+Z)" }))
+    vim.keymap.set({ "n", "v" }, "<C-S-Z>", "<cmd>redo<CR>", vim.tbl_extend("force", opts, { desc = "Redo (Ctrl+Shift+Z)" }))
+    vim.keymap.set("i", "<C-y>", "<C-o><C-r>", vim.tbl_extend("force", opts, { desc = "Redo (Ctrl+Y)" }))
+    vim.keymap.set("i", "<C-S-z>", "<C-o><C-r>", vim.tbl_extend("force", opts, { desc = "Redo (Ctrl+Shift+Z)" }))
+    vim.keymap.set("i", "<C-S-Z>", "<C-o><C-r>", vim.tbl_extend("force", opts, { desc = "Redo (Ctrl+Shift+Z)" }))
+
+    -- Ctrl + A: 全选 (Select All)
+    map_alt({ "<C-a>", "<C-A>" }, M.select_all, "Select All (Ctrl+A)")
+
+    -- Esc: 取消选区 / 清除搜索高亮
+    vim.keymap.set({ "n", "v" }, "<Esc>", "<cmd>nohlsearch<CR><Esc>", vim.tbl_extend("force", opts, { desc = "Clear Highlight / Selection" }))
   end
 
   -- 全局注册（草稿/无名缓冲区即刻可用）

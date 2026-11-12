@@ -40,6 +40,31 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
+-- When starting without arguments (argc == 0), automatically open the interactive cheatsheet example.scm
+vim.api.nvim_create_autocmd("VimEnter", {
+  group = scheme_group,
+  callback = function(ev)
+    if vim.fn.argc() == 0 then
+      local buf = ev.buf or vim.api.nvim_get_current_buf()
+      if vim.fn.bufname(buf) == "" and vim.bo[buf].buftype == "" and vim.api.nvim_buf_line_count(buf) <= 1 and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == "" then
+        local candidates = {
+          vim.fn.stdpath("config") .. "/example.scm",
+          vim.fn.getcwd() .. "/example.scm",
+        }
+        if vim.env.STEEL_IDE_DIR then
+          table.insert(candidates, 1, vim.env.STEEL_IDE_DIR .. "/config/example.scm")
+        end
+        for _, path in ipairs(candidates) do
+          if vim.fn.filereadable(path) == 1 then
+            vim.cmd("edit " .. vim.fn.fnameescape(path))
+            return
+          end
+        end
+      end
+    end
+  end,
+})
+
 -- Default empty unnamed buffer to Scheme mode so steel-ide starts ready
 vim.api.nvim_create_autocmd({ "VimEnter", "BufEnter" }, {
   group = scheme_group,

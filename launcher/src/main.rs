@@ -226,13 +226,19 @@ fn main() -> io::Result<()> {
 
     cmd.arg("-u").arg(&init_lua);
 
-    // Process remaining user arguments
+    // Process user arguments or default to example cheatsheet if empty
     let example_path = config_dir.join("example.scm");
-    for arg in &args {
-        if arg == "--example" {
+    if args.is_empty() {
+        if example_path.exists() {
             cmd.arg(&example_path);
-        } else {
-            cmd.arg(arg);
+        }
+    } else {
+        for arg in &args {
+            if arg == "--example" {
+                cmd.arg(&example_path);
+            } else {
+                cmd.arg(arg);
+            }
         }
     }
 
