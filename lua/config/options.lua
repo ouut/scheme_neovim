@@ -34,6 +34,7 @@ opt.hidden = true
 opt.splitbelow = true
 opt.splitright = true
 opt.timeoutlen = 400
+opt.ttimeoutlen = 20
 opt.updatetime = 250
 opt.undofile = true
 opt.swapfile = false

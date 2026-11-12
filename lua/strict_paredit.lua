@@ -1,26 +1,25 @@
 -- =============================================================================
--- Scheme Strict Paredit Implementation Engine
--- Exact implementation according to docs/strict_paredit_algorithm_spec.md
+-- Scheme Strict Paredit 核心算法引擎 (Strict Paredit Core Engine)
+-- 严格基于 docs/strict_paredit_algorithm_spec.md 与 docs/strict_paredit_guide.md 规范实现
+-- 包含：17 个单发结构化操作、纯严格物理按键守卫、全局窗口漫游与标签页轮转
+-- 彻底废除 Vim 模态依赖：Normal / Insert / Visual / Terminal 全时直通单发生效
 -- =============================================================================
 
 local M = {}
 
 -- -----------------------------------------------------------------------------
--- 一、 语法模型与 AST 数据结构 (Syntax Model & AST Parser)
+-- 一、 语法模型与容错 AST 数据结构 (Parser & AST)
 -- -----------------------------------------------------------------------------
 
 local function is_space(b)
-  return b == 32 or b == 9 or b == 10 or b == 13 or b == 12
+  return b == 32 or b == 9 or b == 10 or b == 13
 end
 
 local function is_delimiter(b)
-  if is_space(b) then return true end
-  return b == 40 or b == 41 or b == 91 or b == 93 or b == 123 or b == 125 or b == 34 or b == 59
+  return is_space(b) or b == 40 or b == 41 or b == 91 or b == 93 or b == 123 or b == 125 or b == 34 or b == 59
 end
 
---- 容错 AST 解析器：单遍有限状态机
----@param text string
----@return table SexpNode[]
+--- 容错 AST 解析器算法 (parseSexpressions)
 function M.parseSexpressions(text)
   local stack = {}
   local roots = {}
@@ -30,58 +29,63 @@ function M.parseSexpressions(text)
   while i <= len do
     local b = text:byte(i)
 
+    -- 1. 跳过空白字符
     if is_space(b) then
       i = i + 1
-    -- 单行注释：;.*$
-    elseif b == 59 then
-      local start_idx = i - 1
+
+    -- 2. 单行注释：;.*$
+    elseif b == 59 then -- ';'
+      local s_start = i - 1
       while i <= len and text:byte(i) ~= 10 do
         i = i + 1
       end
-      local node = { start = start_idx, ["end"] = i - 1, type = "comment" }
+      local node = { start = s_start, ["end"] = i - 1, type = "comment" }
       if #stack > 0 then
         table.insert(stack[#stack].children, node)
       else
         table.insert(roots, node)
       end
-    -- 字符字面量：#\space, #\a, #\( 等
-    elseif b == 35 and i + 1 <= len and text:byte(i + 1) == 92 then
-      local start_idx = i - 1
+
+    -- 3. 字符字面量：#\space, #\a, #\( 等
+    elseif b == 35 and i + 1 <= len and text:byte(i + 1) == 92 then -- '#\'
+      local s_start = i - 1
       i = i + 2
       while i <= len and not is_delimiter(text:byte(i)) do
         i = i + 1
       end
-      local node = { start = start_idx, ["end"] = i - 1, type = "atom" }
+      local node = { start = s_start, ["end"] = i - 1, type = "atom" }
       if #stack > 0 then
         table.insert(stack[#stack].children, node)
       else
         table.insert(roots, node)
       end
-    -- 字符串字面量："([^"\\]|\\.)*"
-    elseif b == 34 then
-      local start_idx = i - 1
+
+    -- 4. 字符串字面量："([^"\\]|\\.)*"
+    elseif b == 34 then -- '"'
+      local s_start = i - 1
       i = i + 1
       while i <= len do
         local sb = text:byte(i)
-        if sb == 92 and i + 1 <= len then
+        if sb == 92 and i + 1 <= len then -- '\\'
           i = i + 2
-        elseif sb == 34 then
+        elseif sb == 34 then -- '"'
           i = i + 1
           break
         else
           i = i + 1
         end
       end
-      local node = { start = start_idx, ["end"] = i - 1, type = "string" }
+      local node = { start = s_start, ["end"] = i - 1, type = "string" }
       if #stack > 0 then
         table.insert(stack[#stack].children, node)
       else
         table.insert(roots, node)
       end
-    -- 开括号：(, [, {
+
+    -- 5. 开括号：(, [, {
     elseif b == 40 or b == 91 or b == 123 then
       local open_char = string.char(b)
-      local close_char = open_char == "(" and ")" or (open_char == "[" and "]" or "}")
+      local close_char = b == 40 and ")" or (b == 91 and "]" or "}")
       local node = {
         start = i - 1,
         ["end"] = i,
@@ -92,7 +96,8 @@ function M.parseSexpressions(text)
       }
       table.insert(stack, { node = node, children = {} })
       i = i + 1
-    -- 闭括号：), ], }
+
+    -- 6. 闭括号：), ], }
     elseif b == 41 or b == 93 or b == 125 then
       if #stack > 0 then
         local top = table.remove(stack)
@@ -105,13 +110,14 @@ function M.parseSexpressions(text)
         end
       end
       i = i + 1
-    -- 原子标识符/数字 (atom)
+
+    -- 7. 原子标识符/数字 (atom)
     else
-      local start_idx = i - 1
+      local s_start = i - 1
       while i <= len and not is_delimiter(text:byte(i)) do
         i = i + 1
       end
-      local node = { start = start_idx, ["end"] = i - 1, type = "atom" }
+      local node = { start = s_start, ["end"] = i - 1, type = "atom" }
       if #stack > 0 then
         table.insert(stack[#stack].children, node)
       else
@@ -120,7 +126,7 @@ function M.parseSexpressions(text)
     end
   end
 
-  -- 容错闭合：未闭合的开括号延展至文本末尾
+  -- 8. 容错闭合：未配对的开括号自动隐式延展至文本末尾
   while #stack > 0 do
     local top = table.remove(stack)
     top.node["end"] = len
@@ -135,16 +141,11 @@ function M.parseSexpressions(text)
   return roots
 end
 
--- -----------------------------------------------------------------------------
--- 坐标与偏移量换算辅助函数 (Coordinate Converters)
--- -----------------------------------------------------------------------------
-
 --- 将 0-indexed 字符偏移量转换为 (1-indexed row, 0-indexed col)
 function M.offset_to_pos(text, offset)
+  local target = math.max(0, math.min(offset, #text))
   local row = 1
   local last_nl = 0
-  local len = #text
-  local target = math.min(math.max(offset, 0), len)
   for i = 1, target do
     if text:byte(i) == 10 then
       row = row + 1
@@ -208,13 +209,19 @@ function M.findEnclosingWithParent(roots, pos)
   return enclosing, parent
 end
 
---- 检索覆盖 pos 的最小叶子节点
+--- 检索覆盖 pos 的最小叶子节点 (pos >= node.start && pos <= node.end)
 function M.findInnermostNodeAt(roots, pos)
   local result = nil
+  local min_len = math.huge
+
   local function search(nodes)
     for _, node in ipairs(nodes) do
       if pos >= node.start and pos <= node["end"] then
-        result = node
+        local l = node["end"] - node.start
+        if l < min_len then
+          min_len = l
+          result = node
+        end
         if node.children and #node.children > 0 then
           search(node.children)
         end
@@ -235,12 +242,48 @@ function M.findTopLevelNode(roots, pos)
   return nil
 end
 
+--- 检索在 pos 处闭合的节点（支持光标紧贴在闭括号外侧）
+function M.searchNodeEndingAt(roots, text, pos)
+  local p = pos
+  while p > 0 and (text:byte(p) == 32 or text:byte(p) == 9) do
+    p = p - 1
+  end
+  local found = nil
+  local function search(nodes)
+    for _, node in ipairs(nodes) do
+      if node["end"] == p then
+        found = node
+      end
+      if node.children and #node.children > 0 then
+        search(node.children)
+      end
+    end
+  end
+  search(roots)
+  return found
+end
+
 -- -----------------------------------------------------------------------------
 -- 二、 17 个 Strict Paredit 快捷键算法规范实现
 -- -----------------------------------------------------------------------------
 
 -- 全局选区历史栈（供 Alt+K 扩选 与 Alt+Shift+K 收缩）
 local selection_history_stack = {}
+
+--- 获取当前活动选区（若无选区返回 nil）
+local function get_visual_selection(text)
+  local mode = vim.fn.mode()
+  if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
+    return nil
+  end
+  local s_start = vim.fn.getpos("v")
+  local s_end = vim.api.nvim_win_get_cursor(0)
+  local off1 = M.pos_to_offset(text, s_start[2], s_start[3] - 1)
+  local off2 = M.pos_to_offset(text, s_end[1], s_end[2])
+  local from_off = math.min(off1, off2)
+  local to_off = math.max(off1, off2) + 1
+  return from_off, to_off
+end
 
 --- 设置视觉选区
 local function set_visual_selection(text, start_offset, end_offset)
@@ -256,19 +299,18 @@ local function set_visual_selection(text, start_offset, end_offset)
   vim.api.nvim_win_set_cursor(0, { r2, target_col })
 end
 
---- 获取当前活动选区（若无选区返回 nil）
-local function get_visual_selection(text)
-  local mode = vim.fn.mode()
-  if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
-    return nil
+--- 执行局部单事务替换并定位光标
+local function apply_text_replacement(text, rangeStart, rangeEnd, replacementText, newOffset)
+  local r1, c1 = M.offset_to_pos(text, rangeStart)
+  local r2, c2 = M.offset_to_pos(text, rangeEnd)
+  local lines = vim.split(replacementText, "\n", { plain = true })
+  vim.api.nvim_buf_set_text(0, r1 - 1, c1, r2 - 1, c2, lines)
+
+  if newOffset then
+    local new_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+    local nr, nc = M.offset_to_pos(new_text, newOffset)
+    pcall(vim.api.nvim_win_set_cursor, 0, { nr, nc })
   end
-  local s_start = vim.fn.getpos("v")
-  local s_end = vim.api.nvim_win_get_cursor(0)
-  local off1 = M.pos_to_offset(text, s_start[2], s_start[3] - 1)
-  local off2 = M.pos_to_offset(text, s_end[1], s_end[2])
-  local from_off = math.min(off1, off2)
-  local to_off = math.max(off1, off2) + 1
-  return from_off, to_off
 end
 
 --- 1. 向外扩选 Expand (Alt + K)
@@ -357,7 +399,6 @@ function M.contract()
   if best_child then
     set_visual_selection(text, best_child.start, best_child["end"])
   else
-    -- 塌缩为单点光标
     vim.cmd([[execute "normal! \<ESC>"]])
     local r, c = M.offset_to_pos(text, from_off)
     vim.api.nvim_win_set_cursor(0, { r, c })
@@ -366,6 +407,7 @@ end
 
 --- 2. 发射求值 Eval REPL (Alt + Enter / Ctrl + Enter / Alt + E)
 function M.eval_repl()
+  local in_insert = vim.fn.mode():sub(1, 1) == "i"
   local text, pos = M.get_buffer_context()
   local from_off, to_off = get_visual_selection(text)
   local code = nil
@@ -377,8 +419,11 @@ function M.eval_repl()
     vim.cmd([[execute "normal! \<ESC>"]])
   else
     local roots = M.parseSexpressions(text)
-    local enclosing = M.findEnclosingWithParent(roots, pos)
-    local target = enclosing or M.findInnermostNodeAt(roots, pos) or M.findTopLevelNode(roots, pos)
+    local target = M.searchNodeEndingAt(roots, text, pos)
+      or M.findEnclosingWithParent(roots, pos)
+      or M.findInnermostNodeAt(roots, pos)
+      or M.findTopLevelNode(roots, pos)
+
     if target then
       code = text:sub(target.start + 1, target["end"])
       flash_start, flash_end = target.start, target["end"]
@@ -392,6 +437,18 @@ function M.eval_repl()
 
   if not code or vim.trim(code) == "" then
     return
+  end
+
+  -- 多顶层表达式自动包裹 (begin ...) 确保原子执行
+  local sub_roots = M.parseSexpressions(code)
+  local code_count = 0
+  for _, r in ipairs(sub_roots) do
+    if r.type ~= "comment" then
+      code_count = code_count + 1
+    end
+  end
+  if code_count > 1 then
+    code = "(begin\n" .. code .. "\n)"
   end
 
   -- 视觉闪烁反馈 (Visual Flash - 350ms)
@@ -500,20 +557,6 @@ function M.computeSmartWrap(text, pos, openChar, closeChar)
   end
 end
 
---- 执行文本替换并重置光标（单事务保证原子回滚）
-local function apply_text_replacement(text, rangeStart, rangeEnd, replacementText, newOffset)
-  local r1, c1 = M.offset_to_pos(text, rangeStart)
-  local r2, c2 = M.offset_to_pos(text, rangeEnd)
-  local lines = vim.split(replacementText, "\n", { plain = true })
-  vim.api.nvim_buf_set_text(0, r1 - 1, c1, r2 - 1, c2, lines)
-
-  if newOffset then
-    local new_text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
-    local nr, nc = M.offset_to_pos(new_text, newOffset)
-    vim.api.nvim_win_set_cursor(0, { nr, nc })
-  end
-end
-
 --- 3. 圆括号包裹 Wrap Parens - Calva 智能吸附 (Alt + H)
 function M.wrap_parens()
   local text, pos = M.get_buffer_context()
@@ -544,7 +587,7 @@ function M.wrap_square()
   apply_text_replacement(text, wrap.rangeStart, wrap.rangeEnd, wrap.replacementText, wrap.newOffset)
 end
 
---- 5. 向右吞噬 Slurp Forward (Alt + L)
+--- 5. 向右吞噬 Slurp Forward (Alt + L) - 原子非破坏性局部范围替换
 function M.slurp_forward()
   local text, pos = M.get_buffer_context()
   local roots = M.parseSexpressions(text)
@@ -563,27 +606,25 @@ function M.slurp_forward()
   if not idx or idx >= #siblings then return end
   local next_sib = siblings[idx + 1]
 
-  local close_char = enc.closeChar
-  local before = text:sub(1, enc["end"] - 1)
-  local mid = text:sub(enc["end"] + 1, next_sib["end"])
-  local after = text:sub(next_sib["end"] + 1)
-  mid = mid:gsub("^%s+", "")
+  -- 替换区间：从原闭括号 [enc.end - 1, next_sib.end)
+  local range_start = enc["end"] - 1
+  local range_end = next_sib["end"]
+  local between = text:sub(enc["end"] + 1, next_sib.start)
+  local next_text = text:sub(next_sib.start + 1, next_sib["end"])
+  local needs_space = (between == "")
+  local repl = (needs_space and " " or "") .. between .. next_text .. enc.closeChar
 
-  local new_text = before .. " " .. mid .. close_char .. after
-  local new_lines = vim.split(new_text, "\n", { plain = true })
-  vim.api.nvim_buf_set_lines(0, 0, -1, false, new_lines)
-
-  -- 光标保持在原相对位置
-  local nr, nc = M.offset_to_pos(new_text, pos)
-  vim.api.nvim_win_set_cursor(0, { nr, nc })
+  -- 光标跟随置于新吞入的兄弟之后
+  local new_pos = range_start + #repl - 1
+  apply_text_replacement(text, range_start, range_end, repl, new_pos)
 end
 
---- 6. 向左吐出 Barf Forward (Alt + J)
+--- 6. 向左吐出 Barf Forward (Alt + J) - 原子非破坏性局部范围替换
 function M.barf_forward()
   local text, pos = M.get_buffer_context()
   local roots = M.parseSexpressions(text)
   local enc, _ = M.findEnclosingWithParent(roots, pos)
-  if not enc or not enc.children or #enc.children <= 1 then return end
+  if not enc or not enc.children or #enc.children == 0 then return end
 
   local children = {}
   for _, c in ipairs(enc.children) do
@@ -595,20 +636,17 @@ function M.barf_forward()
 
   local last_child = children[#children]
   local prev_child = children[#children - 1]
-  local close_char = enc.closeChar
 
-  local before = text:sub(1, prev_child["end"])
-  local expelled = text:sub(last_child.start + 1, last_child["end"])
-  local after = text:sub(enc["end"] + 1)
+  -- 替换区间：从前一个子节点尾部 [prev_child.end, enc.end)
+  local range_start = prev_child["end"]
+  local range_end = enc["end"]
+  local between = text:sub(prev_child["end"] + 1, last_child.start)
+  local last_text = text:sub(last_child.start + 1, last_child["end"])
+  local repl = enc.closeChar .. between .. last_text
 
-  local new_text = before .. close_char .. " " .. expelled .. after
-  local new_lines = vim.split(new_text, "\n", { plain = true })
-  vim.api.nvim_buf_set_lines(0, 0, -1, false, new_lines)
-
-  -- 调整光标（若原光标在 expelled 项上，则跟随留在括号内侧闭括号前）
-  local new_pos = math.min(pos, prev_child["end"])
-  local nr, nc = M.offset_to_pos(new_text, new_pos)
-  vim.api.nvim_win_set_cursor(0, { nr, nc })
+  -- 光标留在闭合列表内侧
+  local new_pos = math.min(pos, range_start)
+  apply_text_replacement(text, range_start, range_end, repl, new_pos)
 end
 
 --- 8. 选中顶级函数 Select Defun (Alt + 3)
@@ -659,7 +697,6 @@ function M.forward_sexp()
     local nr, nc = M.offset_to_pos(text, next_node.start)
     vim.api.nvim_win_set_cursor(0, { nr, nc })
   elseif enc then
-    -- 右侧无兄弟，步出至外层闭括号右侧
     local nr, nc = M.offset_to_pos(text, enc["end"])
     vim.api.nvim_win_set_cursor(0, { nr, nc })
   end
@@ -683,7 +720,6 @@ function M.backward_sexp()
     local nr, nc = M.offset_to_pos(text, prev_node.start)
     vim.api.nvim_win_set_cursor(0, { nr, nc })
   elseif enc then
-    -- 左侧无兄弟，步出至外层开括号左侧
     local nr, nc = M.offset_to_pos(text, enc.start)
     vim.api.nvim_win_set_cursor(0, { nr, nc })
   end
@@ -734,14 +770,13 @@ function M.kill_sexp()
 
   local target = nil
   for _, s in ipairs(siblings) do
-    if s.start >= pos then
+    if s["end"] > pos then
       target = s
       break
     end
   end
 
   if target then
-    -- 智能清除后续紧随的空白
     local end_del = target["end"]
     while end_del < #text and (text:byte(end_del + 1) == 32 or text:byte(end_del + 1) == 9) do
       end_del = end_del + 1
@@ -753,18 +788,30 @@ end
 --- 15. 智能格式排版 Indent (Alt + \)
 function M.indent()
   local text, pos = M.get_buffer_context()
-  local roots = M.parseSexpressions(text)
-  local top = M.findTopLevelNode(roots, pos)
-  local enc = M.findEnclosingWithParent(roots, pos)
-  local target = top or enc
+  local from_off, to_off = get_visual_selection(text)
+  local r1, r2
 
-  if target then
-    local r1, _ = M.offset_to_pos(text, target.start)
-    local r2, _ = M.offset_to_pos(text, target["end"])
-    vim.cmd(string.format("silent! %d,%dequal", r1, r2))
+  if from_off and to_off and to_off > from_off then
+    r1, _ = M.offset_to_pos(text, from_off)
+    r2, _ = M.offset_to_pos(text, to_off)
+    vim.cmd([[execute "normal! \<ESC>"]])
   else
-    vim.cmd("silent! normal! ==")
+    local roots = M.parseSexpressions(text)
+    local top = M.findTopLevelNode(roots, pos)
+    local enc = M.findEnclosingWithParent(roots, pos)
+    local target = top or enc
+    if target then
+      r1, _ = M.offset_to_pos(text, target.start)
+      r2, _ = M.offset_to_pos(text, target["end"])
+    else
+      local cur_row = vim.api.nvim_win_get_cursor(0)[1]
+      r1, r2 = cur_row, cur_row
+    end
   end
+
+  local cur = vim.api.nvim_win_get_cursor(0)
+  vim.cmd(string.format("silent! %d,%dequal", r1, r2))
+  pcall(vim.api.nvim_win_set_cursor, 0, cur)
 end
 
 --- 16. 相邻参数对调 Transpose (Alt + Shift + L)
@@ -840,6 +887,44 @@ end
 -- 三、 Pure Strict Paredit 物理按键守卫算法 (Physical Key Guards)
 -- -----------------------------------------------------------------------------
 
+--- 校验选区是否会破坏括号树平衡 (Unbalanced Selection Guard)
+function M.is_selection_balanced(text, from_off, to_off)
+  local roots = M.parseSexpressions(text)
+  local unbalanced = false
+
+  local function check(nodes)
+    for _, node in ipairs(nodes) do
+      if node.type == "list" then
+        if (node.start >= from_off and node.start < to_off and node["end"] > to_off) or
+           (node.start < from_off and node["end"] > from_off and node["end"] <= to_off) then
+          unbalanced = true
+          return
+        end
+        if node.children and #node.children > 0 then
+          check(node.children)
+          if unbalanced then return end
+        end
+      end
+    end
+  end
+
+  check(roots)
+  return not unbalanced
+end
+
+--- 可视模式删除拦截守卫
+function M.handle_visual_delete(key)
+  local text, _ = M.get_buffer_context()
+  local from_off, to_off = get_visual_selection(text)
+  if from_off and to_off and to_off > from_off then
+    if not M.is_selection_balanced(text, from_off, to_off) then
+      vim.notify("Strict Paredit: Selection cuts across unbalanced parens! Deletion blocked to protect AST.", vim.log.levels.WARN)
+      return ""
+    end
+  end
+  return key
+end
+
 --- 退格键拦截状态机 (Backspace Guard)
 function M.handle_backspace()
   local line = vim.api.nvim_get_current_line()
@@ -847,8 +932,8 @@ function M.handle_backspace()
   local ch_before = col > 0 and line:sub(col, col) or ""
   local ch_at = line:sub(col + 1, col + 1)
 
-  -- 1. 空括号对协同删除：(|) -> 清空
-  if (ch_before == "(" and ch_at == ")") or (ch_before == "[" and ch_at == "]") or (ch_before == "{" and ch_at == "}") then
+  -- 1. 空括号对/引号对协同删除：(|) -> 清空
+  if (ch_before == "(" and ch_at == ")") or (ch_before == "[" and ch_at == "]") or (ch_before == "{" and ch_at == "}") or (ch_before == '"' and ch_at == '"') then
     return "<BS><Del>"
   end
 
@@ -859,7 +944,7 @@ function M.handle_backspace()
   end
 
   -- 3. 闭括号右侧：(foo)| -> 步进跳入内侧 (foo|)
-  if ch_before == ")" or ch_before == "]" or ch_before == "}" then
+  if ch_before == ")" or ch_before == "]" or ch_before == "}" or ch_before == '"' then
     return "<Left>"
   end
 
@@ -876,7 +961,7 @@ function M.handle_delete()
   local ch_before = col > 0 and line:sub(col, col) or ""
 
   -- 1. 空括号对协同删除：|() -> 清空
-  if (ch_at == "(" and ch_next == ")") or (ch_at == "[" and ch_next == "]") or (ch_at == "{" and ch_next == "}") then
+  if (ch_at == "(" and ch_next == ")") or (ch_at == "[" and ch_next == "]") or (ch_at == "{" and ch_next == "}") or (ch_at == '"' and ch_next == '"') then
     return "<Del><Del>"
   end
 
@@ -908,15 +993,36 @@ function M.handle_open_char(open_char, close_char)
   return open_char .. close_char .. "<Left>"
 end
 
+--- 双引号智能配对与穿透
+function M.handle_quote()
+  local line = vim.api.nvim_get_current_line()
+  local col = vim.api.nvim_win_get_cursor(0)[2]
+  local ch_before = col > 0 and line:sub(col, col) or ""
+  local ch_at = line:sub(col + 1, col + 1)
+  local ch_prev2 = col > 1 and line:sub(col - 1, col - 1) or ""
+
+  -- 字符字面量 #\" 放行
+  if ch_before == "\\" and ch_prev2 == "#" then
+    return '"'
+  end
+
+  -- 紧贴闭合双引号：穿透跳过
+  if ch_at == '"' then
+    return "<Right>"
+  end
+
+  -- 自动配对
+  return '""<Left>'
+end
+
 --- 普通模式 x 键守卫（删除空对，阻止破坏平衡）
 function M.handle_normal_x()
   local line = vim.api.nvim_get_current_line()
   local col = vim.api.nvim_win_get_cursor(0)[2]
   local ch = line:sub(col + 1, col + 1)
   local ch_next = line:sub(col + 2, col + 2)
-  local ch_prev = col > 0 and line:sub(col, col) or ""
 
-  if (ch == "(" and ch_next == ")") or (ch == "[" and ch_next == "]") or (ch == "{" and ch_next == "}") then
+  if (ch == "(" and ch_next == ")") or (ch == "[" and ch_next == "]") or (ch == "{" and ch_next == "}") or (ch == '"' and ch_next == '"') then
     return "xx"
   end
 
@@ -932,7 +1038,7 @@ end
 -- 四、 全局窗口漫游与 Tab 轮转算法 (Window Roaming & Tab Cycling)
 -- -----------------------------------------------------------------------------
 
---- 聚焦编辑器 (Alt + Shift + Up)
+--- 聚焦编辑器 (Alt + Shift + Up / Alt + Up)
 function M.focus_editor()
   local cur_win = vim.api.nvim_get_current_win()
   local cur_buf = vim.api.nvim_win_get_buf(cur_win)
@@ -951,7 +1057,7 @@ function M.focus_editor()
   end
 end
 
---- 聚焦终端 (Alt + Shift + Down)
+--- 聚焦终端 (Alt + Shift + Down / Alt + Down)
 function M.focus_terminal()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local b = vim.api.nvim_win_get_buf(win)
@@ -995,103 +1101,113 @@ end
 
 -- -----------------------------------------------------------------------------
 -- 五、 快捷键与物理守卫绑定主注册函数 (Setup & Bindings)
+-- 彻底废除 Vim 模态：全套按键在 Normal (n)、Visual (v)、Insert (i) 统一单发生效
 -- -----------------------------------------------------------------------------
 
 function M.setup()
   local function bind_all(bufnr)
     local opts = bufnr and { buffer = bufnr, silent = true } or { silent = true }
     local expr_opts = bufnr and { buffer = bufnr, silent = true, expr = true } or { silent = true, expr = true }
+    local alt_modes = { "n", "v", "i" }
+    local leader_modes = { "n", "v" }
+    local all_modes = { "n", "v", "i", "t" }
+
+    local function map_alt(keys, fn, desc)
+      for _, k in ipairs(keys) do
+        for _, m in ipairs(alt_modes) do
+          vim.keymap.set(m, k, fn, vim.tbl_extend("force", opts, { desc = desc }))
+        end
+      end
+    end
+
+    local function map_leader(keys, fn, desc)
+      for _, k in ipairs(keys) do
+        for _, m in ipairs(leader_modes) do
+          vim.keymap.set(m, k, fn, vim.tbl_extend("force", opts, { desc = desc }))
+        end
+      end
+    end
+
+    local function map_global(keys, fn, desc)
+      for _, k in ipairs(keys) do
+        for _, m in ipairs(all_modes) do
+          if m == "t" then
+            vim.keymap.set("t", k, function()
+              vim.cmd([[call feedkeys("\<C-\>\<C-n>", "n")]])
+              vim.schedule(fn)
+            end, vim.tbl_extend("force", opts, { desc = desc }))
+          else
+            vim.keymap.set(m, k, fn, vim.tbl_extend("force", opts, { desc = desc }))
+          end
+        end
+      end
+    end
 
     -- 1. 向外扩选 Expand (Alt + K)
-    vim.keymap.set({ "n", "v" }, "<M-k>", M.expand, vim.tbl_extend("force", opts, { desc = "Expand Selection (Alt+K)" }))
-    vim.keymap.set({ "n", "v" }, "\x1bk", M.expand, vim.tbl_extend("force", opts, { desc = "Expand Selection (Esc+K)" }))
+    map_alt({ "<M-k>", "\x1bk" }, M.expand, "Expand Selection (Alt+K)")
 
     -- 7. 向内收缩 Contract (Alt + Shift + K / Alt + I)
-    vim.keymap.set({ "n", "v" }, "<M-K>", M.contract, vim.tbl_extend("force", opts, { desc = "Contract Selection (Alt+Shift+K)" }))
-    vim.keymap.set({ "n", "v" }, "<M-i>", M.contract, vim.tbl_extend("force", opts, { desc = "Contract Selection (Alt+I)" }))
-    vim.keymap.set({ "n", "v" }, "\x1bK", M.contract, vim.tbl_extend("force", opts, { desc = "Contract Selection" }))
-    vim.keymap.set({ "n", "v" }, "\x1bi", M.contract, vim.tbl_extend("force", opts, { desc = "Contract Selection" }))
+    map_alt({ "<M-K>", "<M-i>", "\x1bK", "\x1bi" }, M.contract, "Contract Selection (Alt+Shift+K)")
 
     -- 2. 发射求值 Eval REPL (Alt + Enter / Ctrl + Enter / Alt + E)
-    vim.keymap.set({ "n", "v" }, "<M-CR>", M.eval_repl, vim.tbl_extend("force", opts, { desc = "Eval in Steel REPL (Alt+Enter)" }))
-    vim.keymap.set({ "n", "v" }, "<C-CR>", M.eval_repl, vim.tbl_extend("force", opts, { desc = "Eval in Steel REPL (Ctrl+Enter)" }))
-    vim.keymap.set({ "n", "v" }, "<M-e>", M.eval_repl, vim.tbl_extend("force", opts, { desc = "Eval in Steel REPL (Alt+E)" }))
-    vim.keymap.set({ "n", "v" }, "<leader><CR>", M.eval_repl, vim.tbl_extend("force", opts, { desc = "Eval in Steel REPL" }))
-    vim.keymap.set({ "n", "v" }, "<leader>se", M.eval_repl, vim.tbl_extend("force", opts, { desc = "Eval in Steel REPL" }))
+    map_alt({ "<M-CR>", "<C-CR>", "<M-e>", "\x1be", "\x1b\r" }, M.eval_repl, "Eval in Steel REPL (Alt+Enter / Alt+E)")
+    map_leader({ "<leader><CR>", "<leader>se" }, M.eval_repl, "Eval in Steel REPL")
 
     -- 3. 圆括号包裹 Wrap Parens (Alt + H) - Calva Smart Affinity
-    vim.keymap.set({ "n", "v" }, "<M-h>", M.wrap_parens, vim.tbl_extend("force", opts, { desc = "Smart Wrap ( ) (Alt+H)" }))
-    vim.keymap.set({ "n", "v" }, "\x1bh", M.wrap_parens, vim.tbl_extend("force", opts, { desc = "Smart Wrap ( ) (Esc+H)" }))
-    vim.keymap.set("n", "<leader>w(", M.wrap_parens, vim.tbl_extend("force", opts, { desc = "Smart Wrap ( )" }))
+    map_alt({ "<M-h>", "\x1bh" }, M.wrap_parens, "Smart Wrap ( ) (Alt+H)")
+    map_leader({ "<leader>w(", "<leader>wh" }, M.wrap_parens, "Smart Wrap ( )")
 
     -- 4. 方括号包裹 Wrap Square (Alt + Shift + H) - Calva Smart Affinity
-    vim.keymap.set({ "n", "v" }, "<M-H>", M.wrap_square, vim.tbl_extend("force", opts, { desc = "Smart Wrap [ ] (Alt+Shift+H)" }))
-    vim.keymap.set("n", "<leader>w[", M.wrap_square, vim.tbl_extend("force", opts, { desc = "Smart Wrap [ ]" }))
+    map_alt({ "<M-H>", "\x1bH" }, M.wrap_square, "Smart Wrap [ ] (Alt+Shift+H)")
+    map_leader({ "<leader>w[", "<leader>wH" }, M.wrap_square, "Smart Wrap [ ]")
 
     -- 5. 向右吞噬 Slurp Forward (Alt + L)
-    vim.keymap.set("n", "<M-l>", M.slurp_forward, vim.tbl_extend("force", opts, { desc = "Slurp Forward (Alt+L)" }))
-    vim.keymap.set("n", "\x1bl", M.slurp_forward, vim.tbl_extend("force", opts, { desc = "Slurp Forward (Esc+L)" }))
-    vim.keymap.set("n", ">)", M.slurp_forward, vim.tbl_extend("force", opts, { desc = "Slurp Forward" }))
-    vim.keymap.set("n", "<leader>sl", M.slurp_forward, vim.tbl_extend("force", opts, { desc = "Slurp Forward" }))
+    map_alt({ "<M-l>", "\x1bl" }, M.slurp_forward, "Slurp Forward (Alt+L)")
+    map_leader({ ">)", "<leader>sl" }, M.slurp_forward, "Slurp Forward")
 
     -- 6. 向左吐出 Barf Forward (Alt + J)
-    vim.keymap.set("n", "<M-j>", M.barf_forward, vim.tbl_extend("force", opts, { desc = "Barf Forward (Alt+J)" }))
-    vim.keymap.set("n", "\x1bj", M.barf_forward, vim.tbl_extend("force", opts, { desc = "Barf Forward (Esc+J)" }))
-    vim.keymap.set("n", "<)", M.barf_forward, vim.tbl_extend("force", opts, { desc = "Barf Forward" }))
-    vim.keymap.set("n", "<leader>ba", M.barf_forward, vim.tbl_extend("force", opts, { desc = "Barf Forward" }))
+    map_alt({ "<M-j>", "\x1bj" }, M.barf_forward, "Barf Forward (Alt+J)")
+    map_leader({ "<)", "<leader>ba" }, M.barf_forward, "Barf Forward")
 
     -- 8. 选中顶级函数 Select Defun (Alt + 3)
-    vim.keymap.set({ "n", "v" }, "<M-3>", M.select_defun, vim.tbl_extend("force", opts, { desc = "Select Defun (Alt+3)" }))
-    vim.keymap.set({ "n", "v" }, "\x1b3", M.select_defun, vim.tbl_extend("force", opts, { desc = "Select Defun (Esc+3)" }))
-    vim.keymap.set({ "n", "v" }, "<M-k3>", M.select_defun, vim.tbl_extend("force", opts, { desc = "Select Defun (Alt+Numpad3)" }))
-    vim.keymap.set({ "n", "v" }, "<leader>3", M.select_defun, vim.tbl_extend("force", opts, { desc = "Select Defun" }))
+    map_alt({ "<M-3>", "\x1b3", "<M-k3>" }, M.select_defun, "Select Defun (Alt+3)")
+    map_leader({ "<leader>3" }, M.select_defun, "Select Defun")
 
     -- 9. 脱壳解包 Splice (Alt + O)
-    vim.keymap.set("n", "<M-o>", M.splice, vim.tbl_extend("force", opts, { desc = "Splice / Unwrap (Alt+O)" }))
-    vim.keymap.set("n", "\x1bo", M.splice, vim.tbl_extend("force", opts, { desc = "Splice / Unwrap (Esc+O)" }))
-    vim.keymap.set("n", "<leader>sp", M.splice, vim.tbl_extend("force", opts, { desc = "Splice / Unwrap" }))
+    map_alt({ "<M-o>", "\x1bo" }, M.splice, "Splice / Unwrap (Alt+O)")
+    map_leader({ "<leader>sp" }, M.splice, "Splice / Unwrap")
 
     -- 10. 大步前进 Forward Sexp (Alt + 2)
-    vim.keymap.set("n", "<M-2>", M.forward_sexp, vim.tbl_extend("force", opts, { desc = "Forward Sexp (Alt+2)" }))
-    vim.keymap.set("n", "\x1b2", M.forward_sexp, vim.tbl_extend("force", opts, { desc = "Forward Sexp (Esc+2)" }))
-    vim.keymap.set("n", "<M-k2>", M.forward_sexp, vim.tbl_extend("force", opts, { desc = "Forward Sexp (Alt+Numpad2)" }))
-    vim.keymap.set("n", "<leader>2", M.forward_sexp, vim.tbl_extend("force", opts, { desc = "Forward Sexp" }))
-    vim.keymap.set("n", "]e", M.forward_sexp, vim.tbl_extend("force", opts, { desc = "Forward Sexp" }))
+    map_alt({ "<M-2>", "\x1b2", "<M-k2>" }, M.forward_sexp, "Forward Sexp (Alt+2)")
+    map_leader({ "]e", "<leader>2" }, M.forward_sexp, "Forward Sexp")
 
     -- 11. 大步后退 Backward Sexp (Alt + 1)
-    vim.keymap.set("n", "<M-1>", M.backward_sexp, vim.tbl_extend("force", opts, { desc = "Backward Sexp (Alt+1)" }))
-    vim.keymap.set("n", "\x1b1", M.backward_sexp, vim.tbl_extend("force", opts, { desc = "Backward Sexp (Esc+1)" }))
-    vim.keymap.set("n", "<M-k1>", M.backward_sexp, vim.tbl_extend("force", opts, { desc = "Backward Sexp (Alt+Numpad1)" }))
-    vim.keymap.set("n", "<leader>1", M.backward_sexp, vim.tbl_extend("force", opts, { desc = "Backward Sexp" }))
-    vim.keymap.set("n", "[e", M.backward_sexp, vim.tbl_extend("force", opts, { desc = "Backward Sexp" }))
+    map_alt({ "<M-1>", "\x1b1", "<M-k1>" }, M.backward_sexp, "Backward Sexp (Alt+1)")
+    map_leader({ "[e", "<leader>1" }, M.backward_sexp, "Backward Sexp")
 
     -- 12. 步进深入 Step Into (Alt + W)
-    vim.keymap.set("n", "<M-w>", M.step_into, vim.tbl_extend("force", opts, { desc = "Step Into (Alt+W)" }))
-    vim.keymap.set("n", "\x1bw", M.step_into, vim.tbl_extend("force", opts, { desc = "Step Into (Esc+W)" }))
-    vim.keymap.set("n", "]f", M.step_into, vim.tbl_extend("force", opts, { desc = "Step Into" }))
+    map_alt({ "<M-w>", "\x1bw" }, M.step_into, "Step Into (Alt+W)")
+    map_leader({ "]f" }, M.step_into, "Step Into")
 
     -- 13. 步退跳出 Step Out (Alt + S)
-    vim.keymap.set("n", "<M-s>", M.step_out, vim.tbl_extend("force", opts, { desc = "Step Out (Alt+S)" }))
-    vim.keymap.set("n", "\x1bs", M.step_out, vim.tbl_extend("force", opts, { desc = "Step Out (Esc+S)" }))
-    vim.keymap.set("n", "[f", M.step_out, vim.tbl_extend("force", opts, { desc = "Step Out" }))
+    map_alt({ "<M-s>", "\x1bs" }, M.step_out, "Step Out (Alt+S)")
+    map_leader({ "[f" }, M.step_out, "Step Out")
 
     -- 14. 向后整块删除 Kill Sexp (Alt + X)
-    vim.keymap.set("n", "<M-x>", M.kill_sexp, vim.tbl_extend("force", opts, { desc = "Kill Sexp (Alt+X)" }))
-    vim.keymap.set("n", "\x1bx", M.kill_sexp, vim.tbl_extend("force", opts, { desc = "Kill Sexp (Esc+X)" }))
-    vim.keymap.set("n", "<leader>k", M.kill_sexp, vim.tbl_extend("force", opts, { desc = "Kill Sexp" }))
+    map_alt({ "<M-x>", "\x1bx" }, M.kill_sexp, "Kill Sexp (Alt+X)")
+    map_leader({ "<leader>k" }, M.kill_sexp, "Kill Sexp")
 
     -- 15. 智能格式排版 Indent (Alt + \)
-    vim.keymap.set({ "n", "v" }, "<M-\\>", M.indent, vim.tbl_extend("force", opts, { desc = "Indent Form / Selection (Alt+\\)" }))
-    vim.keymap.set({ "n", "v" }, "\x1b\\", M.indent, vim.tbl_extend("force", opts, { desc = "Indent Form / Selection" }))
-    vim.keymap.set({ "n", "v" }, "<leader>=", M.indent, vim.tbl_extend("force", opts, { desc = "Indent Form / Selection" }))
+    map_alt({ "<M-\\>", "\x1b\\" }, M.indent, "Indent Form / Selection (Alt+\\)")
+    map_leader({ "<leader>=" }, M.indent, "Indent Form / Selection")
 
     -- 16. 相邻参数对调 Transpose (Alt + Shift + L)
-    vim.keymap.set("n", "<M-L>", M.transpose, vim.tbl_extend("force", opts, { desc = "Transpose (Alt+Shift+L)" }))
-    vim.keymap.set("n", "<leader>tr", M.transpose, vim.tbl_extend("force", opts, { desc = "Transpose" }))
+    map_alt({ "<M-L>", "\x1bL" }, M.transpose, "Transpose (Alt+Shift+L)")
+    map_leader({ "<leader>tr" }, M.transpose, "Transpose")
 
     -- 17. 列表切分 Split (Alt + Shift + J)
-    vim.keymap.set("n", "<M-J>", M.split, vim.tbl_extend("force", opts, { desc = "Split Form (Alt+Shift+J)" }))
-    vim.keymap.set("n", "<leader>sj", M.split, vim.tbl_extend("force", opts, { desc = "Split Form" }))
+    map_alt({ "<M-J>", "\x1bJ" }, M.split, "Split Form (Alt+Shift+J)")
+    map_leader({ "<leader>sj" }, M.split, "Split Form")
 
     -- 物理按键守卫 (Key Guards)
     vim.keymap.set("i", "<BS>", M.handle_backspace, expr_opts)
@@ -1102,13 +1218,21 @@ function M.setup()
     vim.keymap.set("i", "(", function() return M.handle_open_char("(", ")") end, expr_opts)
     vim.keymap.set("i", "[", function() return M.handle_open_char("[", "]") end, expr_opts)
     vim.keymap.set("i", "{", function() return M.handle_open_char("{", "}") end, expr_opts)
+    vim.keymap.set("i", '"', M.handle_quote, expr_opts)
     vim.keymap.set("n", "x", M.handle_normal_x, expr_opts)
 
+    -- 可视选区删除平衡守卫 (Unbalanced Selection Guard)
+    vim.keymap.set("v", "<BS>", function() return M.handle_visual_delete("<BS>") end, expr_opts)
+    vim.keymap.set("v", "<Del>", function() return M.handle_visual_delete("<Del>") end, expr_opts)
+    vim.keymap.set("v", "x", function() return M.handle_visual_delete("x") end, expr_opts)
+    vim.keymap.set("v", "d", function() return M.handle_visual_delete("d") end, expr_opts)
+    vim.keymap.set("v", "c", function() return M.handle_visual_delete("c") end, expr_opts)
+
     -- 全局漫游与 Tab 轮转 (Window Roaming & Tab Cycling)
-    vim.keymap.set({ "n", "t" }, "<M-S-Up>", M.focus_editor, vim.tbl_extend("force", opts, { desc = "Focus Editor (Alt+Shift+Up)" }))
-    vim.keymap.set({ "n", "t" }, "<M-S-Down>", M.focus_terminal, vim.tbl_extend("force", opts, { desc = "Focus Terminal (Alt+Shift+Down)" }))
-    vim.keymap.set({ "n", "t" }, "<M-S-Left>", function() M.cycle_tab(-1) end, vim.tbl_extend("force", opts, { desc = "Prev Tab Cycle (Alt+Shift+Left)" }))
-    vim.keymap.set({ "n", "t" }, "<M-S-Right>", function() M.cycle_tab(1) end, vim.tbl_extend("force", opts, { desc = "Next Tab Cycle (Alt+Shift+Right)" }))
+    map_global({ "<M-S-Up>", "<M-Up>" }, M.focus_editor, "Focus Editor (Alt+Shift+Up / Alt+Up)")
+    map_global({ "<M-S-Down>", "<M-Down>" }, M.focus_terminal, "Focus Terminal (Alt+Shift+Down / Alt+Down)")
+    map_global({ "<M-S-Left>", "<M-Left>" }, function() M.cycle_tab(-1) end, "Prev Tab Cycle (Alt+Shift+Left / Alt+Left)")
+    map_global({ "<M-S-Right>", "<M-Right>" }, function() M.cycle_tab(1) end, "Next Tab Cycle (Alt+Shift+Right / Alt+Right)")
   end
 
   -- 全局注册（草稿/无名缓冲区即刻可用）

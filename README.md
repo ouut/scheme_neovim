@@ -65,23 +65,23 @@ steel-ide --extract /opt/steel-ide-runtime
 
 | 频级 / 占比 | Linux / Win | macOS (⌥) | 动作名称 | 对应底层实现 | 功能与效果 |
 |:---:|:---:|:---:|:---|:---|:---|
-| ⭐⭐⭐⭐⭐ (45%) | **`Alt + K`** | **`⌥ K`** | **向外扩选 (Expand)** | Treesitter `incremental_selection` | 自动严丝合缝选中当前 `(...)`，连按逐层外扩括号 |
-| ⭐⭐⭐⭐⭐ (45%) | **`Alt + E`** (推荐)<br>**`Space + Enter`**<br>`Alt + Enter` | **`⌥ E`**<br>**`Space + ↵`**<br>`⌥ ↵` | **发射求值 (Eval REPL)** | `steel_repl.eval_*` | 将当前 S 表达式送入 Steel REPL（Win 下避免 `Alt+Enter` 全屏冲突） |
-| ⭐⭐⭐⭐ (25%) | **`Alt + H`** | **`⌥ H`** | **圆括号包裹 (Wrap Parens)** | `wrap_element_under_cursor("(", ")")` | `cards` $\rightarrow$ `(cards)`（支持可视选区包裹） |
-| ⭐⭐⭐⭐ (25%) | **`Alt + Shift + H`** | **`⌥ ⇧ H`** | **方括号包裹 (Wrap Square)** | `wrap_element_under_cursor("[", "]")` | `x 10` $\rightarrow$ `[x 10]`（写 `let*` 必备） |
-| ⭐⭐⭐⭐ (20%) | **`Alt + L`** | **`⌥ L`** | **向右吞噬 (Slurp)** | `paredit.api.slurp_forwards` | `(a b) c` $\rightarrow$ `(a b c)` |
-| ⭐⭐⭐⭐ (20%) | **`Alt + J`** | **`⌥ J`** | **向左吐出 (Barf)** | `paredit.api.barf_forwards` | `(a b c)` $\rightarrow$ `(a b) c` |
-| ⭐⭐⭐ (15%) | **`Alt + Shift + K`** | **`⌥ ⇧ K`** | **向内收缩 (Contract)** | Treesitter `node_decremental` | 与 `Alt+K` 镜像呼应，扩选过头随时往回收缩一级 |
-| ⭐⭐⭐ (10%) | **`Alt + 3`** | **`⌥ 3`** | **选中顶级函数 (Defun)** | `select_around_top_level_form` | 无论光标藏在函数多深，一键选中最外层 `(define ...)` |
-| ⭐⭐⭐ (10%) | **`Alt + O`** | **`⌥ O`** | **脱壳解包 (Splice)** | `paredit.api.unwrap_form_under_cursor` | `(let () (expr))` $\rightarrow$ `(expr)`，打碎外壳提取内部 |
-| ⭐⭐⭐ (10%) | **`Alt + 2`** | **`⌥ 2`** | **大步前进 (Forward)** | `move_to_next_element_head` | 光标直接跨过右侧整组完整 S 表达式或参数 |
-| ⭐⭐⭐ (10%) | **`Alt + 1`** | **`⌥ 1`** | **大步后退 (Backward)** | `move_to_prev_element_head` | 光标直接跨过左侧整组完整 S 表达式或参数 |
-| ⭐⭐ (5%) | **`Alt + W`** | **`⌥ W`** | **步进深入 (Step Into)** | 钻入内部最左侧元素 | 光标直接跳入当前括号内部首个参数处 |
-| ⭐⭐ (5%) | **`Alt + S`** | **`⌥ S`** | **步退跳出 (Step Out)** | `move_to_parent_form_start` | 光标跳回当前外层括号起始处 |
-| ⭐⭐ (5%) | **`Alt + X`** | **`⌥ X`** | **整块删除 (Kill Sexp)** | `paredit.api.delete_element` | 删掉光标处的一整组子表达式，不破坏括号结构 |
-| ⭐⭐ (5%) | **`Alt + \`** | **`⌥ \`** | **智能格式排版 (Indent)** | `select_around_form` + `=` | 重新按 Lisp 缩进规范对齐当前 S 表达式代码块 |
-| ⭐ (2%) | **`Alt + Shift + L`** | **`⌥ ⇧ L`** | **相邻参数对调 (Transpose)** | `paredit.api.drag_element_forwards` | `(equal? a b)` $\rightarrow$ `(equal? b a)` |
-| ⭐ (2%) | **`Alt + Shift + J`** | **`⌥ ⇧ J`** | **列表切分 (Split)** | 智能识别括号类型并切分 | `(a b \| c d)` $\rightarrow$ `(a b) (c d)` |
+| ⭐⭐⭐⭐⭐ (45%) | **`Alt + K`** | **`⌥ K`** | **向外扩选 (Expand)** | `strict_paredit.expand` | 自动严丝合缝选中当前 `(...)`，连按逐层外扩括号（选区历史压栈） |
+| ⭐⭐⭐⭐⭐ (45%) | **`Alt + E`** (推荐)<br>**`Space + Enter`**<br>`Alt + Enter` | **`⌥ E`**<br>**`Space + ↵`**<br>`⌥ ↵` | **发射求值 (Eval REPL)** | `strict_paredit.eval_repl` | 将当前 S 表达式送入 Steel REPL（350ms 视觉闪烁，多表达式自动 begin 事务原子求值） |
+| ⭐⭐⭐⭐ (25%) | **`Alt + H`** | **`⌥ H`** | **圆括号包裹 (Wrap Parens)** | `strict_paredit.wrap_parens` | `cards` $\rightarrow$ `(cards)`（Calva 智能吸附 5 态几何规则，支持 N/V/I 模式） |
+| ⭐⭐⭐⭐ (25%) | **`Alt + Shift + H`** | **`⌥ ⇧ H`** | **方括号包裹 (Wrap Square)** | `strict_paredit.wrap_square` | `x 10` $\rightarrow$ `[x 10]`（写 `let*` 局部变量与 `cond` 必备） |
+| ⭐⭐⭐⭐ (20%) | **`Alt + L`** | **`⌥ L`** | **向右吞噬 (Slurp)** | `strict_paredit.slurp_forward` | `(a b) c` $\rightarrow$ `(a b c)`（非破坏性局部范围替换，多行格式完好保留） |
+| ⭐⭐⭐⭐ (20%) | **`Alt + J`** | **`⌥ J`** | **向左吐出 (Barf)** | `strict_paredit.barf_forward` | `(a b c)` $\rightarrow$ `(a b) c`（非破坏性局部范围替换，多行格式完好保留） |
+| ⭐⭐⭐ (15%) | **`Alt + Shift + K`**<br>`Alt + I` | **`⌥ ⇧ K`**<br>`⌥ I` | **向内收缩 (Contract)** | `strict_paredit.contract` | 与 `Alt+K` 镜像呼应，基于选区历史栈精准逐层回退选区 |
+| ⭐⭐⭐ (10%) | **`Alt + 3`** | **`⌥ 3`** | **选中顶级函数 (Defun)** | `strict_paredit.select_defun` | 无论光标藏在函数多深，一键选中最外层整个 `(define ...)` |
+| ⭐⭐⭐ (10%) | **`Alt + O`** | **`⌥ O`** | **脱壳解包 (Splice)** | `strict_paredit.splice` | `(let () (expr))` $\rightarrow$ `(expr)`，打碎外壳提取内部代码 |
+| ⭐⭐⭐ (10%) | **`Alt + 2`** | **`⌥ 2`** | **大步前进 (Forward)** | `strict_paredit.forward_sexp` | 首首跳转 Head-to-Head 跨过右侧整组完整 S 表达式或参数 |
+| ⭐⭐⭐ (10%) | **`Alt + 1`** | **`⌥ 1`** | **大步后退 (Backward)** | `strict_paredit.backward_sexp` | 首首跳转 Head-to-Head 跨过左侧整组完整 S 表达式或参数 |
+| ⭐⭐ (5%) | **`Alt + W`** | **`⌥ W`** | **步进深入 (Step Into)** | `strict_paredit.step_into` | 光标直接步进跳入当前括号内部最左侧首个参数前 |
+| ⭐⭐ (5%) | **`Alt + S`** | **`⌥ S`** | **步退跳出 (Step Out)** | `strict_paredit.step_out` | 光标跳回当前外层括号左侧前置起始位 |
+| ⭐⭐ (5%) | **`Alt + X`** | **`⌥ X`** | **整块删除 (Kill Sexp)** | `strict_paredit.kill_sexp` | 删掉当前或光标右侧的一整组完整子表达式，绝不破坏括号结构 |
+| ⭐⭐ (5%) | **`Alt + \`** | **`⌥ \`** | **智能格式排版 (Indent)** | `strict_paredit.indent` | 重新按 Lisp 缩进规范对齐当前 S 表达式代码块或选区 |
+| ⭐ (2%) | **`Alt + Shift + L`** | **`⌥ ⇧ L`** | **相邻参数对调 (Transpose)** | `strict_paredit.transpose` | `(equal? a b)` $\rightarrow$ `(equal? b a)`，两项位置瞬间互换 |
+| ⭐ (2%) | **`Alt + Shift + J`** | **`⌥ ⇧ J`** | **列表切分 (Split)** | `strict_paredit.split` | 智能保留匹配定界符，从光标处平分列表 |
 
 ---
 

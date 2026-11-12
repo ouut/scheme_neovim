@@ -24,13 +24,7 @@ pcall(function()
       additional_vim_regex_highlighting = true,
     },
     incremental_selection = {
-      enable = true,
-      keymaps = {
-        init_selection = "<M-k>",
-        node_incremental = "<M-k>",
-        scope_incremental = false,
-        node_decremental = "<M-K>",
-      },
+      enable = false,
     },
   })
 end)

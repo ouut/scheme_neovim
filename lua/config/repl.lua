@@ -15,10 +15,12 @@ vim.api.nvim_create_user_command("SteelSendBuffer", repl.eval_buffer, { desc = "
 -- 全局快捷键 (Global Shortcuts)
 -- 遵循 docs/strict_paredit_guide.md 单发理念：Alt + R (Mac: ⌥ R) 一键秒开/秒关
 -- -------------------------------------------------------------------------
--- 1. 普通模式按 Alt + R：切换展开/收起 REPL
-vim.keymap.set("n", "<M-r>", repl.toggle, { silent = true, desc = "Toggle Steel REPL (One-Shot Alt+R)" })
+-- 1. 普通模式、插入模式、可视模式按 Alt + R：切换展开/收起 REPL
+vim.keymap.set({ "n", "v", "i" }, "<M-r>", repl.toggle, { silent = true, desc = "Toggle Steel REPL (One-Shot Alt+R)" })
+vim.keymap.set({ "n", "v", "i" }, "\x1br", repl.toggle, { silent = true, desc = "Toggle Steel REPL (One-Shot Alt+R)" })
 -- 2. 终端模式内按 Alt + R：直接收起 REPL 并光标回到代码编辑器
 vim.keymap.set("t", "<M-r>", repl.close, { silent = true, desc = "Close Steel REPL from terminal (Alt+R)" })
+vim.keymap.set("t", "\x1br", repl.close, { silent = true, desc = "Close Steel REPL from terminal (Alt+R)" })
 
 -- 全局 Leader 快捷键支持 (Space + s + ...)
 vim.keymap.set("n", "<leader>so", repl.toggle, { silent = true, desc = "Toggle (open/hide) Steel REPL" })

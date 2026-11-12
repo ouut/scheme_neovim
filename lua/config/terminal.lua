@@ -10,13 +10,15 @@ vim.api.nvim_create_user_command("ShellClose", term.close, { desc = "Close botto
 -- 1. 单发核心快捷键: Alt + T (Mac: ⌥ T, T = Terminal)
 -- 与 Alt + R (REPL) 完美呼应，遵循 One-Shot 哲学
 -- -------------------------------------------------------------------------
-vim.keymap.set("n", "<M-t>", term.toggle, { silent = true, desc = "Toggle Bottom Shell (Alt+T)" })
+vim.keymap.set({ "n", "v", "i" }, "<M-t>", term.toggle, { silent = true, desc = "Toggle Bottom Shell (Alt+T)" })
+vim.keymap.set({ "n", "v", "i" }, "\x1bt", term.toggle, { silent = true, desc = "Toggle Bottom Shell (Alt+T)" })
 vim.keymap.set("t", "<M-t>", term.close, { silent = true, desc = "Close Bottom Shell from terminal (Alt+T)" })
+vim.keymap.set("t", "\x1bt", term.close, { silent = true, desc = "Close Bottom Shell from terminal (Alt+T)" })
 
 -- -------------------------------------------------------------------------
 -- 2. 常用 IDE 习惯快捷键: Ctrl + ` (反引号，类似 VS Code)
 -- -------------------------------------------------------------------------
-vim.keymap.set("n", "<C-`>", term.toggle, { silent = true, desc = "Toggle Bottom Shell (Ctrl+`)" })
+vim.keymap.set({ "n", "v", "i" }, "<C-`>", term.toggle, { silent = true, desc = "Toggle Bottom Shell (Ctrl+`)" })
 vim.keymap.set("t", "<C-`>", term.close, { silent = true, desc = "Close Bottom Shell from terminal (Ctrl+`)" })
 
 -- -------------------------------------------------------------------------
