@@ -4,7 +4,7 @@
 1. **方案 A（推荐）：`steel-ide` 全内嵌单文件二进制（All-in-One Executable）**：将 Neovim、Steel Scheme 运行时、Tree-sitter Scheme 语法库及全套 Strict Paredit 配置封装为单一独立文件（仅 13MB），双击或命令行直接运行，**无需安装任何依赖**！
 2. **纯 Neovim 配置形态**：可直接软链接至 `~/.config/nvim`，无缝嵌入既有的 Neovim 开发流。
 
-完美复刻并实现了 [`docs/strict_paredit_guide.md`](docs/strict_paredit_guide.md) 中的设计哲学与 **17 个单发核心快捷键**。
+完美复刻并实现了 [`docs/strict_paredit_guide.md`](docs/strict_paredit_guide.md) 与 [`docs/strict_paredit_algorithm_spec.md`](docs/strict_paredit_algorithm_spec.md) 中的严格括号树算法、Calva 智能包裹规则与 **17 个单发核心快捷键**。
 
 ---
 
@@ -82,6 +82,19 @@ steel-ide --extract /opt/steel-ide-runtime
 | ⭐⭐ (5%) | **`Alt + \`** | **`⌥ \`** | **智能格式排版 (Indent)** | `select_around_form` + `=` | 重新按 Lisp 缩进规范对齐当前 S 表达式代码块 |
 | ⭐ (2%) | **`Alt + Shift + L`** | **`⌥ ⇧ L`** | **相邻参数对调 (Transpose)** | `paredit.api.drag_element_forwards` | `(equal? a b)` $\rightarrow$ `(equal? b a)` |
 | ⭐ (2%) | **`Alt + Shift + J`** | **`⌥ ⇧ J`** | **列表切分 (Split)** | 智能识别括号类型并切分 | `(a b \| c d)` $\rightarrow$ `(a b) (c d)` |
+
+---
+
+## 🛠️ 窗口与多标签全局漫游
+
+无论处于普通模式还是内置终端/REPL 交互模式，无需按 `<C-\><C-n>` 繁琐逃逸，全时直通响应：
+
+| 快捷键 | 作用区域 | 功能说明 | 逻辑细节 |
+|:---|:---|:---|:---|
+| **`Alt + Shift + Up`** | 全局 | **光标直达上方代码编辑器** | 自动寻找并聚焦代码窗口 |
+| **`Alt + Shift + Down`** | 全局 | **光标直达下方/分屏终端或 REPL** | 自动聚焦活跃的 REPL 或系统终端 |
+| **`Alt + Shift + Left`** | 全局 | **循环切换至左侧标签页 (Buffer)** | `(idx - 1) % N` 逆时针无限循环环游 |
+| **`Alt + Shift + Right`** | 全局 | **循环切换至右侧标签页 (Buffer)** | `(idx + 1) % N` 顺时针无限循环环游 |
 
 ---
 
