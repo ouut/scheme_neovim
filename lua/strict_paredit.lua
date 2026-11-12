@@ -625,11 +625,19 @@ end
 function M.splice()
   local text, pos = M.get_buffer_context()
   local roots = M.parseSexpressions(text)
+  local node_at = M.findInnermostNodeAt(roots, pos)
   local enc, _ = M.findEnclosingWithParent(roots, pos)
-  if not enc then return end
 
-  local inner_text = text:sub(enc.start + 2, enc["end"] - 1)
-  apply_text_replacement(text, enc.start, enc["end"], inner_text, enc.start)
+  local target = nil
+  if node_at and node_at.type == "list" and (pos == node_at.start or pos == node_at["end"] - 1) then
+    target = node_at
+  else
+    target = enc
+  end
+  if not target or target.type ~= "list" then return end
+
+  local inner_text = text:sub(target.start + 2, target["end"] - 1)
+  apply_text_replacement(text, target.start, target["end"], inner_text, target.start)
 end
 
 --- 10. 大步前进 Forward Sexp - Head-to-Head (Alt + 2)
@@ -841,7 +849,7 @@ function M.handle_backspace()
 
   -- 1. 空括号对协同删除：(|) -> 清空
   if (ch_before == "(" and ch_at == ")") or (ch_before == "[" and ch_at == "]") or (ch_before == "{" and ch_at == "}") then
-    return vim.api.nvim_replace_termcodes("<BS><Del>", true, true, true)
+    return "<BS><Del>"
   end
 
   -- 2. 非空列表开括号右侧：(|foo) -> 硬拦截
@@ -852,11 +860,11 @@ function M.handle_backspace()
 
   -- 3. 闭括号右侧：(foo)| -> 步进跳入内侧 (foo|)
   if ch_before == ")" or ch_before == "]" or ch_before == "}" then
-    return vim.api.nvim_replace_termcodes("<Left>", true, true, true)
+    return "<Left>"
   end
 
   -- 默认放行
-  return vim.api.nvim_replace_termcodes("<BS>", true, true, true)
+  return "<BS>"
 end
 
 --- 删除键拦截状态机 (Delete Guard)
@@ -869,7 +877,7 @@ function M.handle_delete()
 
   -- 1. 空括号对协同删除：|() -> 清空
   if (ch_at == "(" and ch_next == ")") or (ch_at == "[" and ch_next == "]") or (ch_at == "{" and ch_next == "}") then
-    return vim.api.nvim_replace_termcodes("<Del><Del>", true, true, true)
+    return "<Del><Del>"
   end
 
   -- 2. 非空闭括号左侧：(foo|) -> 硬拦截
@@ -880,7 +888,7 @@ function M.handle_delete()
     end
   end
 
-  return vim.api.nvim_replace_termcodes("<Del>", true, true, true)
+  return "<Del>"
 end
 
 --- 闭括号穿透跳跃 (Close Delimiter Step-over)
@@ -890,14 +898,14 @@ function M.handle_close_char(char)
   local ch_at = line:sub(col + 1, col + 1)
 
   if ch_at == char then
-    return vim.api.nvim_replace_termcodes("<Right>", true, true, true)
+    return "<Right>"
   end
   return char
 end
 
 --- 开括号自动配对并居中光标
 function M.handle_open_char(open_char, close_char)
-  return open_char .. close_char .. vim.api.nvim_replace_termcodes("<Left>", true, true, true)
+  return open_char .. close_char .. "<Left>"
 end
 
 --- 普通模式 x 键守卫（删除空对，阻止破坏平衡）
