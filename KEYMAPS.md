@@ -111,4 +111,12 @@
 | **`Ctrl + l`** | 将光标焦点移至 **右侧** 窗口 (进入 REPL) |
 | **`Ctrl + j`** | 将光标焦点移至 **下方** 窗口 (进入 Shell) |
 | **`Ctrl + k`** | 将光标焦点移至 **上方** 窗口 |
+
+### 5.3 全局窗口漫游与 Tab 轮转 (规范第四节)
+| 快捷键 (Linux/Win) | macOS (⌥) | 模式 | 功能说明 |
+|:---|:---|:---:|:---|
+| **`Alt + Shift + Up`** | **`⌥ ⇧ ↑`** | Normal / Terminal | **聚焦编辑器**：聚焦代码编辑器窗口；若无文件自动新建 Scheme 缓冲区 |
+| **`Alt + Shift + Down`** | **`⌥ ⇧ ↓`** | Normal / Terminal | **聚焦终端**：立即将焦点移入活动终端 (Steel REPL 或 Shell) |
+| **`Alt + Shift + Left`** | **`⌥ ⇧ ←`** | Normal / Terminal | **向前切 Tab (回环)**：向左切换标签页，第 1 个 Tab 自动回环至末尾 |
+| **`Alt + Shift + Right`** | **`⌥ ⇧ →`** | Normal / Terminal | **向后切 Tab (回环)**：向右切换标签页，末尾 Tab 自动回环至第 1 个 |
 | **`<Esc>`** | 在普通模式下一键清除搜索高亮标记 |
